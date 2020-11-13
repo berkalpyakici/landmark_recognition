@@ -9,9 +9,9 @@ warnings.filterwarnings('ignore')
 sk = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 hostname = socket.gethostname()
 
-RESULT_DIR     = '/data4/data/retrieval2020/result'
-DATA_DIR       = '/data5/data/landmark2020'
-PRETRAINED_DIR = '/data5/data/pretrained'
+RESULT_DIR     = 'landmark_recognition/results'
+DATA_DIR       = 'landmark_recognition'
+PRETRAINED_DIR = 'landmark_recognition/pretrained'
 
 PI  = np.pi
 INF = np.inf

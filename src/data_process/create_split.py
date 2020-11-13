@@ -1,11 +1,11 @@
 import sys
-sys.path.insert(0, '..')
+import os
+sys.path.insert(0, "..")
+#sys.path.insert(0, "/content/landmark_recognition/src")
+#sys.path.insert(0, "/landmark_recognition/src")
 import pandas as pd
 from tqdm import tqdm
-import config
-import os
-
-DATA_DIR = 'landmark_recognition'
+from config.config import *
 
 def create_whole_train_split(train_meta, split_name):
   train_meta = train_meta.copy()
