@@ -5,6 +5,8 @@ from tqdm import tqdm
 import config
 import os
 
+DATA_DIR = 'landmark_recognition'
+
 def create_whole_train_split(train_meta, split_name):
   train_meta = train_meta.copy()
   split_dir = f'{DATA_DIR}/split/{split_name}'
@@ -38,8 +40,8 @@ def create_whole_train_split(train_meta, split_name):
   print(valid_split_df.head())
 
 def create_v2x_split():
-  train_clean_df = pd.read_csv(f'{DATA_DIR}/raw/train_clean.csv', usecols=[TARGET])
-  train_df = pd.read_csv(f'{DATA_DIR}/raw/train.csv', usecols=[ID, TARGET])
+  train_clean_df = pd.read_csv('https://s3.amazonaws.com/google-landmark/metadata/train_clean.csv', usecols=[TARGET])
+  train_df = pd.read_csv('https://s3.amazonaws.com/google-landmark/metadata/train.csv', usecols=[ID, TARGET])
   train_df = train_df[train_df[TARGET].isin(train_clean_df[TARGET].unique())]
 
   landmark_mapping = {l: i for i, l in enumerate(np.sort(train_df[TARGET].unique()))}
@@ -73,7 +75,7 @@ def create_v2x_split():
 
 if __name__ == "__main__":
   print('%s: calling main function ... ' % os.path.basename(__file__))
-  train_clean_df = pd.read_csv(f'{DATA_DIR}/raw/train_clean.csv')
+  train_clean_df = pd.read_csv('https://s3.amazonaws.com/google-landmark/metadata/train_clean.csv')
   train_clean_df['count'] = [len(row.split(' ')) for row in train_clean_df['images'].values]
   train_clean_df[CTARGET] = train_clean_df[TARGET]
   train_clean_df[TARGET] = range(len(train_clean_df))
