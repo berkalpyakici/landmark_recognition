@@ -2,7 +2,7 @@ import sys
 sys.path.insert(0, '..')
 import pandas as pd
 from tqdm import tqdm
-from config.config import *
+import config
 
 def create_whole_train_split(train_meta, split_name):
   train_meta = train_meta.copy()
