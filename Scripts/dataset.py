@@ -39,7 +39,7 @@ def get_transforms(image_size):
 
     transforms_train = albumentations.Compose([
         albumentations.HorizontalFlip(p=0.5),
-        #albumentations.ImageCompression(quality_lower=99, quality_upper=100),
+        albumentations.ImageCompression(quality_lower=99, quality_upper=100),
         #albumentations.ShiftScaleRotate(shift_limit=0.2, scale_limit=0.2, rotate_limit=10, border_mode=0, p=0.7),
         albumentations.Resize(image_size, image_size),
         #albumentations.Cutout(max_h_size=int(image_size * 0.4), max_w_size=int(image_size * 0.4), num_holes=1, p=0.5),
@@ -55,21 +55,21 @@ def get_transforms(image_size):
 
 def get_df(kernel_type, data_dir, train_step):
 
-    df = pd.read_csv('C:/Users/Mason/Downloads/Kaggle/Google Landmark Classification 2020/Data/landmark-recognition-2020/train_0.csv')
+    df = pd.read_csv(f'{data_dir}/train_0.csv')
 
     if train_step == 0:
-        #df_train = pd.read_csv('C:/Users/Mason/Downloads/Kaggle/Google Landmark Classification 2020/Data/landmark-recognition-2020/train_filtered_500.csv').drop(columns=['url'])
-        df_train = pd.read_csv('C:/Users/Mason/Downloads/Kaggle/Google Landmark Classification 2020/Data/landmark-recognition-2020/train_filtered_500.csv')
+        #df_train = pd.read_csv('C:/Users/Mason/Downloads/Kaggle/landmark/Data/landmark-recognition-2020/train_filtered_500.csv').drop(columns=['url'])
+        df_train = pd.read_csv(f'{data_dir}/train_filtered_250.csv')
 
     else:
         cls_81313 = df.landmark_id.unique()
-        df_train = pd.read_csv('C:/Users/Mason/Downloads/Kaggle/Google Landmark Classification 2020/Data/landmark-recognition-2020/train_filtered_500.csv').drop(columns=['url']).set_index('landmark_id').loc[cls_81313].reset_index()
+        df_train = pd.read_csv(f'{data_dir}/train_filtered_250.csv').drop(columns=['url']).set_index('landmark_id').loc[cls_81313].reset_index()
         
     df_train['filepath'] = df_train['id'].apply(lambda x: os.path.join(data_dir, 'train', x[0], x[1], x[2], f'{x}.jpg'))
     df = df_train.merge(df, on=['id','landmark_id'], how='left')
 
     landmark_id2idx = {landmark_id: idx for idx, landmark_id in enumerate(sorted(df['landmark_id'].unique()))}
-    idx2landmark_id = {idx: landmark_id for idx, landmark_id in enumerate(sorted(df['landmark_id'].unique()))}
+    #idx2landmark_id = {idx: landmark_id for idx, landmark_id in enumerate(sorted(df['landmark_id'].unique()))}
     df['landmark_id'] = df['landmark_id'].map(landmark_id2idx)
 
     out_dim = df.landmark_id.nunique()

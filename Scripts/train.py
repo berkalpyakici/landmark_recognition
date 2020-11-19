@@ -24,9 +24,9 @@ from torch.optim import lr_scheduler
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.backends import cudnn
 
-import apex
-from apex import amp
-from apex.parallel import DistributedDataParallel
+#import apex
+#from apex import amp
+#from apex.parallel import DistributedDataParallel
 
 from dataset import LandmarkDataset, get_df, get_transforms
 from util import global_average_precision_score
@@ -53,9 +53,10 @@ def parse_args():
     parser.add_argument('--DEBUG', action='store_true')
     parser.add_argument('--model-dir', type=str, default='./weights')
     parser.add_argument('--log-dir', type=str, default='./logs')
-    parser.add_argument('--CUDA_VISIBLE_DEVICES', type=str, default='0,1,2,3,4,5,6,7')
+    parser.add_argument('--CUDA_VISIBLE_DEVICES', type=str, default='0,1,2,3')
     parser.add_argument('--fold', type=int, default=0)
     parser.add_argument('--load-from', type=str, default='')
+    parser.add_argument('--distributed', type=bool, default=False)
     args, _ = parser.parse_known_args()
     return args
 
@@ -105,7 +106,7 @@ def train_epoch(model, loader, optimizer, criterion):
 
     return train_loss
 
-def val_epoch(model, valid_loader, criterion, get_output=False):
+def val_epoch(model, valid_loader, criterion):
 
     model.eval()
     val_loss = []
@@ -135,14 +136,11 @@ def val_epoch(model, valid_loader, criterion, get_output=False):
         PREDS_M = torch.cat(PREDS_M).numpy()
         TARGETS = torch.cat(TARGETS)
 
-    if get_output:
-        return LOGITS_M
-    else:
-        acc_m = (PREDS_M == TARGETS.numpy()).mean() * 100.
-        y_true = {idx: target if target >=0 else None for idx, target in enumerate(TARGETS)}
-        y_pred_m = {idx: (pred_cls, conf) for idx, (pred_cls, conf) in enumerate(zip(PREDS_M, PRODS_M))}
-        gap_m = global_average_precision_score(y_true, y_pred_m)
-        return val_loss, acc_m, gap_m
+    acc_m = (PREDS_M == TARGETS.numpy()).mean() * 100.
+    y_true = {idx: target if target >=0 else None for idx, target in enumerate(TARGETS)}
+    y_pred_m = {idx: (pred_cls, conf) for idx, (pred_cls, conf) in enumerate(zip(PREDS_M, PRODS_M))}
+    gap_m = global_average_precision_score(y_true, y_pred_m)
+    return val_loss, acc_m, gap_m
 
 
 def main():
@@ -169,7 +167,7 @@ def main():
     # model
     model = ModelClass(args.enet_type, out_dim=out_dim)
     model = model.cuda()
-    model = apex.parallel.convert_syncbn_model(model)
+    model = apex.parallel.convert_syncbn_model(model) if args.distributed else model
 
     # loss func
     def criterion(logits_m, target):
@@ -181,7 +179,7 @@ def main():
     #optimizer = optim.Adam(model.parameters(), lr=INIT_LR)
     optimizer = optim.SGD(model.parameters(), lr = args.init_lr, momentum = 0.9, weight_decay = 1e-5)   
 
-    #model = DistributedDataParallel(model, delay_allreduce=True)
+    model = DistributedDataParallel(model, delay_allreduce=True) if args.distributed else model
     
     # lr scheduler
     scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, args.n_epochs-1)
@@ -204,7 +202,7 @@ def main():
         import gc
         gc.collect()   
 
-    #model = DistributedDataParallel(model, delay_allreduce=True)
+    model = DistributedDataParallel(model, delay_allreduce=True) if args.distributed else model
 
     # train & valid loop
     gap_m_max = 0.
@@ -214,8 +212,8 @@ def main():
         print(time.ctime(), 'Epoch:', epoch)
         scheduler_cosine.step(epoch - 1)
 
-        train_sampler = torch.utils.data.distributed.DistributedSampler(dataset_train) if is_distributed else None
-        if is_distributed:
+        train_sampler = torch.utils.data.distributed.DistributedSampler(dataset_train) if args.distributed else None
+        if args.distributed:
             train_sampler.set_epoch(epoch)
 
         train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size, num_workers=args.num_workers,
@@ -260,13 +258,12 @@ if __name__ == '__main__':
 
     set_seed(0)
 
-    is_distributed = False
-    torch.cuda.set_device(0)
-
-    # if args.CUDA_VISIBLE_DEVICES != '-1':
-    #     torch.backends.cudnn.benchmark = True
-    #     torch.cuda.set_device(args.local_rank)
-    #     torch.distributed.init_process_group(backend='nccl', init_method='env://')
-    #     cudnn.benchmark = True
+    if args.distributed:
+        torch.backends.cudnn.benchmark = True
+        torch.cuda.set_device(args.local_rank)
+        torch.distributed.init_process_group(backend='nccl', init_method='env://')
+        cudnn.benchmark = True
+    else:
+        torch.cuda.set_device(0)    
 
     main()
