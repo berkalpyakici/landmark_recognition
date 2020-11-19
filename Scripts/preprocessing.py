@@ -10,7 +10,7 @@ def parse_args():
     return args
 
 def main():
-    df_train = pd.read_csv(f'{args.data_dir}/train_filtered_250.csv')
+    df_train = pd.read_csv(f'{args.data_dir}/train_subset_00.csv')
 
     skf = StratifiedKFold(5, shuffle=True, random_state=233)
 
