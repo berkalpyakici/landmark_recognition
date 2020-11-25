@@ -3,16 +3,26 @@ import cv2
 import numpy as np
 import pandas as pd
 import albumentations
-import torch
-from torch.utils.data import Dataset
+import time
+import pickle
+import random
+import argparse
+from tqdm import tqdm as tqdm
+from sklearn.metrics import cohen_kappa_score, confusion_matrix
 
 import math
+import torch
+from torch.utils.data import Dataset, TensorDataset, DataLoader
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from torch.autograd import Variable
 from torch.hub import load_state_dict_from_url
 from torchvision.models.resnet import ResNet, Bottleneck
+import torch.optim as optim
+from torch.optim import lr_scheduler
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.backends import cudnn
 import geffnet
 
 from typing import Dict, Tuple, Any
@@ -239,37 +249,6 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
-import cv2
-import math
-import time
-import pickle
-import random
-import argparse
-import albumentations
-import numpy as np
-import pandas as pd
-from tqdm import tqdm as tqdm
-from sklearn.metrics import cohen_kappa_score, confusion_matrix
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import TensorDataset, DataLoader, Dataset
-import torch.optim as optim
-from torch.optim import lr_scheduler
-from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch.backends import cudnn
-
-#import apex
-#from apex import amp
-#from apex.parallel import DistributedDataParallel
-
-# from dataset import LandmarkDataset, get_df, get_transforms
-# from util import global_average_precision_score
-# from models import DenseCrossEntropy, Swish_module
-# from models import ArcFaceLossAdaptiveMargin, Effnet_Landmark
-
-
 def parse_args():
 
     parser = argparse.ArgumentParser()
@@ -289,7 +268,7 @@ def parse_args():
     parser.add_argument('--DEBUG', action='store_true')
     parser.add_argument('--model-dir', type=str, default='./weights')
     parser.add_argument('--log-dir', type=str, default='./logs')
-    parser.add_argument('--CUDA_VISIBLE_DEVICES', type=str, default='0,1,2,3')
+    parser.add_argument('--CUDA_VISIBLE_DEVICES', type=str, default='0')
     parser.add_argument('--fold', type=int, default=0)
     parser.add_argument('--load-from', type=str, default='')
     parser.add_argument('--distributed', type=bool, default=False)
@@ -320,18 +299,6 @@ def train_epoch(model, loader, optimizer, criterion):
         loss = criterion(logits_m, target)
         loss.backward()
         optimizer.step()
-
-        # if not args.use_amp:
-        #     logits_m = model(data)
-        #     loss = criterion(logits_m, target)
-        #     loss.backward()
-        #     optimizer.step()
-        # else:
-        #     logits_m = model(data)
-        #     loss = criterion(logits_m, target)
-        #     with amp.scale_loss(loss, optimizer) as scaled_loss:
-        #         scaled_loss.backward()
-        #     optimizer.step()
 
         torch.cuda.synchronize()
             
@@ -403,7 +370,7 @@ def main():
     # model
     model = ModelClass(args.enet_type, out_dim=out_dim)
     model = model.cuda()
-    model = apex.parallel.convert_syncbn_model(model) if args.distributed else model
+    #model = apex.parallel.convert_syncbn_model(model) if args.distributed else model
 
     # loss func
     def criterion(logits_m, target):
@@ -415,7 +382,7 @@ def main():
     #optimizer = optim.Adam(model.parameters(), lr=INIT_LR)
     optimizer = optim.SGD(model.parameters(), lr = args.init_lr, momentum = 0.9, weight_decay = 1e-5)   
 
-    model = DistributedDataParallel(model, delay_allreduce=True) if args.distributed else model
+    #model = DistributedDataParallel(model, delay_allreduce=True) if args.distributed else model
     
     # lr scheduler
     scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, args.n_epochs-1)
@@ -438,7 +405,7 @@ def main():
         import gc
         gc.collect()   
 
-    model = DistributedDataParallel(model, delay_allreduce=True) if args.distributed else model
+    #model = DistributedDataParallel(model, delay_allreduce=True) if args.distributed else model
 
     # train & valid loop
     gap_m_max = 0.
