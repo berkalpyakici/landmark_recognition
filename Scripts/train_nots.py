@@ -1,8 +1,30 @@
+# dataset.py
 import os
 import cv2
 import numpy as np
 import pandas as pd
 import albumentations
+import torch
+
+# util.py
+from typing import Dict, Tuple, Any
+
+# models.py
+import math
+import numpy as np
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.nn.parameter import Parameter
+from torch.autograd import Variable
+from torch.hub import load_state_dict_from_url
+from torchvision.models.resnet import ResNet, Bottleneck
+import geffnet
+
+# train.py
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+
 import time
 import pickle
 import random
@@ -10,30 +32,22 @@ import argparse
 from tqdm import tqdm as tqdm
 from sklearn.metrics import cohen_kappa_score, confusion_matrix
 
-import math
-import torch
-from torch.utils.data import Dataset, TensorDataset, DataLoader
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.nn.parameter import Parameter
-from torch.autograd import Variable
-from torch.hub import load_state_dict_from_url
-from torchvision.models.resnet import ResNet, Bottleneck
+from torch.utils.data import TensorDataset, DataLoader, Dataset
 import torch.optim as optim
 from torch.optim import lr_scheduler
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.backends import cudnn
-import geffnet
 
-from typing import Dict, Tuple, Any
+# DATASET
 
 class LandmarkDataset(Dataset):
-    def __init__(self, csv, split, mode, transform=None):
+    def __init__(self, csv, split, mode, data_dir, transform=None):
 
         self.csv = csv.reset_index()
         self.split = split
         self.mode = mode
         self.transform = transform
+        self.data_dir = data_dir
 
     def __len__(self):
         return self.csv.shape[0]
@@ -41,7 +55,10 @@ class LandmarkDataset(Dataset):
     def __getitem__(self, index):
         row = self.csv.iloc[index]
 
-        image = cv2.imread(row.filepath)[:,:,::-1]
+        if os.path.exists(row.filepath):
+            image = cv2.imread(row.filepath)[:,:,::-1]
+        else:
+            return torch.tensor(np.array([None]))
 
         if self.transform is not None:
             res = self.transform(image=image)
@@ -50,10 +67,7 @@ class LandmarkDataset(Dataset):
             image = image.astype(np.float32)
 
         image = image.transpose(2, 0, 1)
-        if self.mode == 'test':
-            return torch.tensor(image)
-        else:
-            return torch.tensor(image), torch.tensor(row.landmark_id)
+        return torch.tensor(image), torch.tensor(row.landmark_id)
 
 
 def get_transforms(image_size):
@@ -61,9 +75,7 @@ def get_transforms(image_size):
     transforms_train = albumentations.Compose([
         albumentations.HorizontalFlip(p=0.5),
         albumentations.ImageCompression(quality_lower=99, quality_upper=100),
-        #albumentations.ShiftScaleRotate(shift_limit=0.2, scale_limit=0.2, rotate_limit=10, border_mode=0, p=0.7),
         albumentations.Resize(image_size, image_size),
-        #albumentations.Cutout(max_h_size=int(image_size * 0.4), max_w_size=int(image_size * 0.4), num_holes=1, p=0.5),
         albumentations.Normalize()
     ])
 
@@ -79,24 +91,61 @@ def get_df(kernel_type, data_dir, train_step):
     df = pd.read_csv(f'{data_dir}/train_0.csv')
 
     if train_step == 0:
-        #df_train = pd.read_csv('C:/Users/Mason/Downloads/Kaggle/landmark/Data/landmark-recognition-2020/train_filtered_500.csv').drop(columns=['url'])
-        df_train = pd.read_csv(f'{data_dir}/train_subset_00.csv')
+        df_train = pd.read_csv(f'{data_dir}/train_filtered_100.csv')
 
     else:
         cls_81313 = df.landmark_id.unique()
-        df_train = pd.read_csv(f'{data_dir}/train_subset_00.csv').drop(columns=['url']).set_index('landmark_id').loc[cls_81313].reset_index()
+        df_train = pd.read_csv(f'{data_dir}/train_filtered_100.csv').drop(columns=['url']).set_index('landmark_id').loc[cls_81313].reset_index()
         
     df_train['filepath'] = df_train['id'].apply(lambda x: os.path.join(data_dir, 'train', x[0], x[1], x[2], f'{x}.jpg'))
     df = df_train.merge(df, on=['id','landmark_id'], how='left')
 
     landmark_id2idx = {landmark_id: idx for idx, landmark_id in enumerate(sorted(df['landmark_id'].unique()))}
-    #idx2landmark_id = {idx: landmark_id for idx, landmark_id in enumerate(sorted(df['landmark_id'].unique()))}
     df['landmark_id'] = df['landmark_id'].map(landmark_id2idx)
 
     out_dim = df.landmark_id.nunique()
 
     return df, out_dim
 
+### UTIL
+
+def global_average_precision_score(
+        y_true: Dict[Any, Any],
+        y_pred: Dict[Any, Tuple[Any, float]]
+) -> float:
+    """
+    Compute Global Average Precision score (GAP)
+    Parameters
+    ----------
+    y_true : Dict[Any, Any]
+        Dictionary with query ids and true ids for query samples
+    y_pred : Dict[Any, Tuple[Any, float]]
+        Dictionary with query ids and predictions (predicted id, confidence
+        level)
+    Returns
+    -------
+    float
+        GAP score
+    """
+    indexes = list(y_pred.keys())
+    indexes.sort(
+        key=lambda x: -y_pred[x][1],
+    )
+    queries_with_target = len([i for i in y_true.values() if i is not None])
+    correct_predictions = 0
+    total_score = 0.
+    for i, k in enumerate(indexes, 1):
+        relevance_of_prediction_i = 0
+        if y_true[k] == y_pred[k][0]:
+            correct_predictions += 1
+            relevance_of_prediction_i = 1
+        precision_at_rank_i = correct_predictions / i
+        total_score += precision_at_rank_i * relevance_of_prediction_i
+
+    return 1 / queries_with_target * total_score
+
+
+### MODELS
 
 class Swish(torch.autograd.Function):
 
@@ -192,7 +241,6 @@ class ArcFaceLossAdaptiveMargin(nn.modules.Module):
 
 
 class Effnet_Landmark(nn.Module):
-
     def __init__(self, enet_type, out_dim):
         super(Effnet_Landmark, self).__init__()
         self.enet = geffnet.create_model(enet_type.replace('-', '_'), pretrained=True)
@@ -209,45 +257,6 @@ class Effnet_Landmark(nn.Module):
         logits_m = self.metric_classify(self.swish(self.feat(x)))
         return logits_m
 
-def global_average_precision_score(
-        y_true: Dict[Any, Any],
-        y_pred: Dict[Any, Tuple[Any, float]]
-) -> float:
-    """
-    Compute Global Average Precision score (GAP)
-    Parameters
-    ----------
-    y_true : Dict[Any, Any]
-        Dictionary with query ids and true ids for query samples
-    y_pred : Dict[Any, Tuple[Any, float]]
-        Dictionary with query ids and predictions (predicted id, confidence
-        level)
-    Returns
-    -------
-    float
-        GAP score
-    """
-    indexes = list(y_pred.keys())
-    indexes.sort(
-        key=lambda x: -y_pred[x][1],
-    )
-    queries_with_target = len([i for i in y_true.values() if i is not None])
-    correct_predictions = 0
-    total_score = 0.
-    for i, k in enumerate(indexes, 1):
-        relevance_of_prediction_i = 0
-        if y_true[k] == y_pred[k][0]:
-            correct_predictions += 1
-            relevance_of_prediction_i = 1
-        precision_at_rank_i = correct_predictions / i
-        total_score += precision_at_rank_i * relevance_of_prediction_i
-
-    return 1 / queries_with_target * total_score
-
-import os
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
-os.environ["OMP_NUM_THREADS"] = "1"
 
 def parse_args():
 
@@ -264,17 +273,14 @@ def parse_args():
     parser.add_argument('--n-epochs', type=int, default=15)
     parser.add_argument('--start-from-epoch', type=int, default=1)
     parser.add_argument('--stop-at-epoch', type=int, default=999)
-    parser.add_argument('--use-amp', action='store_false')
     parser.add_argument('--DEBUG', action='store_true')
     parser.add_argument('--model-dir', type=str, default='./weights')
     parser.add_argument('--log-dir', type=str, default='./logs')
-    parser.add_argument('--CUDA_VISIBLE_DEVICES', type=str, default='0')
+    parser.add_argument('--CUDA_VISIBLE_DEVICES', type=str, default='0,1,2,3')
     parser.add_argument('--fold', type=int, default=0)
     parser.add_argument('--load-from', type=str, default='')
-    parser.add_argument('--distributed', type=bool, default=False)
     args, _ = parser.parse_known_args()
     return args
-
 
 def set_seed(seed=0):
     random.seed(seed)
@@ -283,7 +289,6 @@ def set_seed(seed=0):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
-
 
 def train_epoch(model, loader, optimizer, criterion):
 
@@ -345,6 +350,9 @@ def val_epoch(model, valid_loader, criterion):
     gap_m = global_average_precision_score(y_true, y_pred_m)
     return val_loss, acc_m, gap_m
 
+def collate_fn(batch):
+    batch = list(filter(lambda x: x is not None, batch))
+    return torch.utils.data.dataloader.default_collate(batch)
 
 def main():
 
@@ -359,18 +367,22 @@ def main():
     # get augmentations
     transforms_train, transforms_val = get_transforms(args.image_size)
 
-    # get train and valid dataset
-    df_train = df[df['fold'] != args.fold]
-    df_valid = df[df['fold'] == args.fold].reset_index(drop=True).query("index % 15==0")
+    # get train and valid and test dataset
+    df_train = df[df['fold'].between(args.fold, args.fold + 6)]
+    df_valid = df[df['fold'].between(args.fold + 7, args.fold + 8)].reset_index(drop=True)
+    df_test = df[df['fold'] == (args.fold + 9)].reset_index(drop=True)
 
-    dataset_train = LandmarkDataset(df_train, 'train', 'train', transform=transforms_train)
-    dataset_valid = LandmarkDataset(df_valid, 'train', 'val', transform=transforms_val)
-    valid_loader = torch.utils.data.DataLoader(dataset_valid, batch_size=args.batch_size, num_workers=args.num_workers)
+    print(f"df_train: {df_train.shape}, df_valid: {df_valid.shape}, df_test: {df_test.shape}")
+
+    dataset_train = LandmarkDataset(df_train, 'train', 'train', transform=transforms_train, data_dir = args.data_dir)
+    dataset_valid = LandmarkDataset(df_valid, 'train', 'val', transform=transforms_val, data_dir = args.data_dir)
+    dataset_test = LandmarkDataset(df_test, 'train', 'val', transform=transforms_val, data_dir = args.data_dir)
+    valid_loader = DataLoader(dataset_valid, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=collate_fn)
+    test_loader = DataLoader(dataset_test, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=collate_fn)
 
     # model
     model = ModelClass(args.enet_type, out_dim=out_dim)
     model = model.cuda()
-    #model = apex.parallel.convert_syncbn_model(model) if args.distributed else model
 
     # loss func
     def criterion(logits_m, target):
@@ -379,14 +391,10 @@ def main():
         return loss_m
 
     # optimizer
-    #optimizer = optim.Adam(model.parameters(), lr=INIT_LR)
     optimizer = optim.SGD(model.parameters(), lr = args.init_lr, momentum = 0.9, weight_decay = 1e-5)   
-
-    #model = DistributedDataParallel(model, delay_allreduce=True) if args.distributed else model
     
     # lr scheduler
     scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, args.n_epochs-1)
-    #scheduler_warmup = GradualWarmupSchedulerV2(optimizer, multiplier=10, total_epoch=1, after_scheduler=scheduler_cosine)
 
     # load pretrained
     if len(args.load_from) > 0:
@@ -397,15 +405,11 @@ def main():
             del state_dict['metric_classify.weight']
             model.load_state_dict(state_dict, strict=False)
         else:
-            model.load_state_dict(state_dict, strict=True)        
-#             if 'optimizer_state_dict' in checkpoint:
-#                 optimizer.load_state_dict(checkpoint['optimizer_state_dict'])   
+            model.load_state_dict(state_dict, strict=True) 
         del checkpoint, state_dict
         torch.cuda.empty_cache()
         import gc
-        gc.collect()   
-
-    #model = DistributedDataParallel(model, delay_allreduce=True) if args.distributed else model
+        gc.collect()
 
     # train & valid loop
     gap_m_max = 0.
@@ -415,12 +419,7 @@ def main():
         print(time.ctime(), 'Epoch:', epoch)
         scheduler_cosine.step(epoch - 1)
 
-        train_sampler = torch.utils.data.distributed.DistributedSampler(dataset_train) if args.distributed else None
-        if args.distributed:
-            train_sampler.set_epoch(epoch)
-
-        train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size, num_workers=args.num_workers,
-                                                  shuffle=train_sampler is None, sampler=train_sampler, drop_last=True)        
+        train_loader = DataLoader(dataset_train, batch_size=args.batch_size, num_workers=args.num_workers, drop_last=True, collate_fn=collate_fn)        
 
         train_loss = train_epoch(model, train_loader, optimizer, criterion)
         val_loss, acc_m, gap_m = val_epoch(model, valid_loader, criterion)
@@ -449,6 +448,9 @@ def main():
         'optimizer_state_dict': optimizer.state_dict(),
     }, os.path.join(args.model_dir, f'{args.kernel_type}_fold{args.fold}_final.pth'))
 
+    test_loss, test_acc_m, test_gap_m = val_epoch(model, test_loader, criterion)
+    test_output = f'Test loss: {(test_loss):.5f}, acc_m: {(test_acc_m):.6f}, gap_m: {(test_gap_m):.6f}.'
+    print(test_output)
 
 if __name__ == '__main__':
 
@@ -461,12 +463,6 @@ if __name__ == '__main__':
 
     set_seed(0)
 
-    if args.distributed:
-        torch.backends.cudnn.benchmark = True
-        torch.cuda.set_device(args.local_rank)
-        torch.distributed.init_process_group(backend='nccl', init_method='env://')
-        cudnn.benchmark = True
-    else:
-        torch.cuda.set_device(0)    
+    torch.cuda.set_device(0)    
 
     main()
