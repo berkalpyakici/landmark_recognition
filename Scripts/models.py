@@ -103,7 +103,6 @@ class ArcFaceLossAdaptiveMargin(nn.modules.Module):
 
 
 class Effnet_Landmark(nn.Module):
-
     def __init__(self, enet_type, out_dim):
         super(Effnet_Landmark, self).__init__()
         self.enet = geffnet.create_model(enet_type.replace('-', '_'), pretrained=True)

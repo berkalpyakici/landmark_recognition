@@ -4,15 +4,17 @@ import numpy as np
 import pandas as pd
 import albumentations
 import torch
+import zipfile
 from torch.utils.data import Dataset
 
 class LandmarkDataset(Dataset):
-    def __init__(self, csv, split, mode, transform=None):
+    def __init__(self, csv, split, mode, data_dir, transform=None):
 
         self.csv = csv.reset_index()
         self.split = split
         self.mode = mode
         self.transform = transform
+        self.data_dir = data_dir
 
     def __len__(self):
         return self.csv.shape[0]
@@ -20,7 +22,10 @@ class LandmarkDataset(Dataset):
     def __getitem__(self, index):
         row = self.csv.iloc[index]
 
-        image = cv2.imread(row.filepath)[:,:,::-1]
+        if os.path.exists(row.filepath):
+            image = cv2.imread(row.filepath)[:,:,::-1]
+        else:
+            return torch.tensor(np.array([None]))
 
         if self.transform is not None:
             res = self.transform(image=image)
@@ -29,10 +34,7 @@ class LandmarkDataset(Dataset):
             image = image.astype(np.float32)
 
         image = image.transpose(2, 0, 1)
-        if self.mode == 'test':
-            return torch.tensor(image)
-        else:
-            return torch.tensor(image), torch.tensor(row.landmark_id)
+        return torch.tensor(image), torch.tensor(row.landmark_id)
 
 
 def get_transforms(image_size):
@@ -66,6 +68,7 @@ def get_df(kernel_type, data_dir, train_step):
         df_train = pd.read_csv(f'{data_dir}/train_filtered_250.csv').drop(columns=['url']).set_index('landmark_id').loc[cls_81313].reset_index()
         
     df_train['filepath'] = df_train['id'].apply(lambda x: os.path.join(data_dir, 'train', x[0], x[1], x[2], f'{x}.jpg'))
+    #df_train['filepath'] = df_train['id'].apply(lambda x: os.path.join('train', x[0], x[1], x[2], f'{x}.jpg'))
     df = df_train.merge(df, on=['id','landmark_id'], how='left')
 
     landmark_id2idx = {landmark_id: idx for idx, landmark_id in enumerate(sorted(df['landmark_id'].unique()))}

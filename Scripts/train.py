@@ -24,15 +24,9 @@ from torch.optim import lr_scheduler
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.backends import cudnn
 
-#import apex
-#from apex import amp
-#from apex.parallel import DistributedDataParallel
-
 from dataset import LandmarkDataset, get_df, get_transforms
 from util import global_average_precision_score
-from models import DenseCrossEntropy, Swish_module
-from models import ArcFaceLossAdaptiveMargin, Effnet_Landmark
-
+from models import DenseCrossEntropy, Swish_module, ArcFaceLossAdaptiveMargin, Effnet_Landmark
 
 def parse_args():
 
@@ -49,17 +43,14 @@ def parse_args():
     parser.add_argument('--n-epochs', type=int, default=15)
     parser.add_argument('--start-from-epoch', type=int, default=1)
     parser.add_argument('--stop-at-epoch', type=int, default=999)
-    parser.add_argument('--use-amp', action='store_false')
     parser.add_argument('--DEBUG', action='store_true')
     parser.add_argument('--model-dir', type=str, default='./weights')
     parser.add_argument('--log-dir', type=str, default='./logs')
     parser.add_argument('--CUDA_VISIBLE_DEVICES', type=str, default='0,1,2,3')
     parser.add_argument('--fold', type=int, default=0)
     parser.add_argument('--load-from', type=str, default='')
-    parser.add_argument('--distributed', type=bool, default=False)
     args, _ = parser.parse_known_args()
     return args
-
 
 def set_seed(seed=0):
     random.seed(seed)
@@ -68,7 +59,6 @@ def set_seed(seed=0):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
-
 
 def train_epoch(model, loader, optimizer, criterion):
 
@@ -84,18 +74,6 @@ def train_epoch(model, loader, optimizer, criterion):
         loss = criterion(logits_m, target)
         loss.backward()
         optimizer.step()
-
-        # if not args.use_amp:
-        #     logits_m = model(data)
-        #     loss = criterion(logits_m, target)
-        #     loss.backward()
-        #     optimizer.step()
-        # else:
-        #     logits_m = model(data)
-        #     loss = criterion(logits_m, target)
-        #     with amp.scale_loss(loss, optimizer) as scaled_loss:
-        #         scaled_loss.backward()
-        #     optimizer.step()
 
         torch.cuda.synchronize()
             
@@ -142,6 +120,9 @@ def val_epoch(model, valid_loader, criterion):
     gap_m = global_average_precision_score(y_true, y_pred_m)
     return val_loss, acc_m, gap_m
 
+def collate_fn(batch):
+    batch = list(filter(lambda x: x is not None, batch))
+    return torch.utils.data.dataloader.default_collate(batch)
 
 def main():
 
@@ -156,18 +137,22 @@ def main():
     # get augmentations
     transforms_train, transforms_val = get_transforms(args.image_size)
 
-    # get train and valid dataset
-    df_train = df[df['fold'] != args.fold]
-    df_valid = df[df['fold'] == args.fold].reset_index(drop=True).query("index % 15==0")
+    # get train and valid and test dataset
+    df_train = df[df['fold'].between(args.fold, args.fold + 6)]
+    df_valid = df[df['fold'].between(args.fold + 7, args.fold + 8)].reset_index(drop=True)
+    df_test = df[df['fold'] == (args.fold + 9)].reset_index(drop=True)
 
-    dataset_train = LandmarkDataset(df_train, 'train', 'train', transform=transforms_train)
-    dataset_valid = LandmarkDataset(df_valid, 'train', 'val', transform=transforms_val)
-    valid_loader = torch.utils.data.DataLoader(dataset_valid, batch_size=args.batch_size, num_workers=args.num_workers)
+    print(f"df_train: {df_train.shape}, df_valid: {df_valid.shape}, df_test: {df_test.shape}")
+
+    dataset_train = LandmarkDataset(df_train, 'train', 'train', transform=transforms_train, data_dir = args.data_dir)
+    dataset_valid = LandmarkDataset(df_valid, 'train', 'val', transform=transforms_val, data_dir = args.data_dir)
+    dataset_test = LandmarkDataset(df_test, 'train', 'val', transform=transforms_val, data_dir = args.data_dir)
+    valid_loader = DataLoader(dataset_valid, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=collate_fn)
+    test_loader = DataLoader(dataset_test, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=collate_fn)
 
     # model
     model = ModelClass(args.enet_type, out_dim=out_dim)
     model = model.cuda()
-    model = apex.parallel.convert_syncbn_model(model) if args.distributed else model
 
     # loss func
     def criterion(logits_m, target):
@@ -176,14 +161,10 @@ def main():
         return loss_m
 
     # optimizer
-    #optimizer = optim.Adam(model.parameters(), lr=INIT_LR)
     optimizer = optim.SGD(model.parameters(), lr = args.init_lr, momentum = 0.9, weight_decay = 1e-5)   
-
-    model = DistributedDataParallel(model, delay_allreduce=True) if args.distributed else model
     
     # lr scheduler
     scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, args.n_epochs-1)
-    #scheduler_warmup = GradualWarmupSchedulerV2(optimizer, multiplier=10, total_epoch=1, after_scheduler=scheduler_cosine)
 
     # load pretrained
     if len(args.load_from) > 0:
@@ -194,15 +175,11 @@ def main():
             del state_dict['metric_classify.weight']
             model.load_state_dict(state_dict, strict=False)
         else:
-            model.load_state_dict(state_dict, strict=True)        
-#             if 'optimizer_state_dict' in checkpoint:
-#                 optimizer.load_state_dict(checkpoint['optimizer_state_dict'])   
+            model.load_state_dict(state_dict, strict=True) 
         del checkpoint, state_dict
         torch.cuda.empty_cache()
         import gc
-        gc.collect()   
-
-    model = DistributedDataParallel(model, delay_allreduce=True) if args.distributed else model
+        gc.collect()
 
     # train & valid loop
     gap_m_max = 0.
@@ -212,12 +189,7 @@ def main():
         print(time.ctime(), 'Epoch:', epoch)
         scheduler_cosine.step(epoch - 1)
 
-        train_sampler = torch.utils.data.distributed.DistributedSampler(dataset_train) if args.distributed else None
-        if args.distributed:
-            train_sampler.set_epoch(epoch)
-
-        train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size, num_workers=args.num_workers,
-                                                  shuffle=train_sampler is None, sampler=train_sampler, drop_last=True)        
+        train_loader = DataLoader(dataset_train, batch_size=args.batch_size, num_workers=args.num_workers, drop_last=True, collate_fn=collate_fn)        
 
         train_loss = train_epoch(model, train_loader, optimizer, criterion)
         val_loss, acc_m, gap_m = val_epoch(model, valid_loader, criterion)
@@ -246,6 +218,10 @@ def main():
         'optimizer_state_dict': optimizer.state_dict(),
     }, os.path.join(args.model_dir, f'{args.kernel_type}_fold{args.fold}_final.pth'))
 
+    test_loss, test_acc_m, test_gap_m = val_epoch(model, test_loader, criterion)
+    test_output = f'Test loss: {(test_loss):.5f}, acc_m: {(test_acc_m):.6f}, gap_m: {(test_gap_m):.6f}.'
+    print(test_output)
+
 
 if __name__ == '__main__':
 
@@ -258,12 +234,6 @@ if __name__ == '__main__':
 
     set_seed(0)
 
-    if args.distributed:
-        torch.backends.cudnn.benchmark = True
-        torch.cuda.set_device(args.local_rank)
-        torch.distributed.init_process_group(backend='nccl', init_method='env://')
-        cudnn.benchmark = True
-    else:
-        torch.cuda.set_device(0)    
+    torch.cuda.set_device(0)    
 
     main()

@@ -1,0 +1,6 @@
+Wed Dec  2 20:39:11 2020 Fold 0, Epoch 1, lr: 0.0001000, train loss: 37.99789, valid loss: 36.92568, acc_m: 0.961538, gap_m: 0.000094.
+Wed Dec  2 20:48:53 2020 Fold 0, Epoch 2, lr: 0.0001000, train loss: 36.15584, valid loss: 36.30673, acc_m: 0.000000, gap_m: 0.000000.
+Wed Dec  2 21:07:39 2020 Fold 0, Epoch 1, lr: 0.0001000, train loss: 38.96335, valid loss: 37.98085, acc_m: 0.506971, gap_m: 0.000023.
+Wed Dec  2 21:09:43 2020 Fold 0, Epoch 2, lr: 0.0001000, train loss: 37.85061, valid loss: 37.27342, acc_m: 0.633714, gap_m: 0.000061.
+Wed Dec  2 21:14:58 2020 Fold 0, Epoch 1, lr: 0.0001000, train loss: 39.03103, valid loss: 38.03423, acc_m: 0.253646, gap_m: 0.000010.
+Wed Dec  2 21:17:02 2020 Fold 0, Epoch 2, lr: 0.0001000, train loss: 37.96649, valid loss: 37.14401, acc_m: 0.570704, gap_m: 0.000027.
