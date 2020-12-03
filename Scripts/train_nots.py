@@ -91,11 +91,11 @@ def get_df(kernel_type, data_dir, train_step):
     df = pd.read_csv(f'{data_dir}/train_0.csv')
 
     if train_step == 0:
-        df_train = pd.read_csv(f'{data_dir}/train_filtered_100.csv')
+        df_train = pd.read_csv(f'{data_dir}/train_filtered_100_new.csv')
 
     else:
         cls_81313 = df.landmark_id.unique()
-        df_train = pd.read_csv(f'{data_dir}/train_filtered_100.csv').drop(columns=['url']).set_index('landmark_id').loc[cls_81313].reset_index()
+        df_train = pd.read_csv(f'{data_dir}/train_filtered_100_new.csv').drop(columns=['url']).set_index('landmark_id').loc[cls_81313].reset_index()
         
     df_train['filepath'] = df_train['id'].apply(lambda x: os.path.join(data_dir, 'train', x[0], x[1], x[2], f'{x}.jpg'))
     df = df_train.merge(df, on=['id','landmark_id'], how='left')
@@ -157,7 +157,7 @@ class Swish(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        i = ctx.saved_variables[0]
+        i = ctx.saved_tensors[0]
         sigmoid_i = torch.sigmoid(i)
         return grad_output * (sigmoid_i * (1 + i * (1 - sigmoid_i)))
 
