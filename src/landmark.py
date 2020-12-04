@@ -1,6 +1,9 @@
+import os
 import csv
 import random
 import torch
+import time
+from tqdm import tqdm as tqdm
 import numpy as np
 import pandas as pd
 
@@ -10,8 +13,9 @@ from utilities import make_transform_train, make_transform_val, global_average_p
 from models import Effnet_Landmark
 
 class Images(torch.utils.data.Dataset):
-    def __init__(self, csv, transform = None, withlabel = True):
+    def __init__(self, csv, img_dim, transform = None, withlabel = True):
         self.csv = csv.reset_index()
+        self.img_dim = img_dim
         self.transform = transform
         self.withlabel = withlabel
     
@@ -28,10 +32,11 @@ class Images(torch.utils.data.Dataset):
                 res = self.transform(image = image)
                 image = res['image'].astype(np.float32)
         else:
+            # TODO: FIX THIS. PYTORCH DOESNT LIKE EMPTY TENSORS
             if self.withlabel:
-                return torch.tensor(np.array([None])), torch.tensor(0)
+                return torch.tensor(np.zeros(shape = (self.img_dim, self.img_dim))), torch.tensor(0)
             else:
-                return torch.tensor(np.array([None]))
+                return torch.tensor(np.zeros(shape = (self.img_dim, self.img_dim)))
         
         image = image.astype(np.float32).transpose(2, 0, 1)
 
@@ -46,33 +51,40 @@ class Landmark():
 
         # Set of Images and Split Sets (Training, CV, Tets)
         self.images = None
-        self.training_set = None
+        self.train_set = None
         self.cv_set = None
         self.test_set = None
 
         self.out_dim = 0
+
+        self.seed()
+
+        if self.args.cuda:
+            torch.cuda.set_device(0)
     
     def train(self):
-        if not self.train_set:
+        if self.train_set is None:
             print('Training set is not loaded.')
             return
 
         # Load Dataset
-        dataset = Images(self.train_set, transform = make_transform_train(self.args.img_dim, self.args.img_dim), withlabel = True)
+        dataset = Images(self.train_set, self.args.img_dim, transform = make_transform_train(self.args.img_dim, self.args.img_dim), withlabel = True)
 
         # Init Model
-        model = Effnet_Landmark(args.enet_type, out_dim = self.out_dim)
-        model = model.cuda()
+        model = Effnet_Landmark('tf_efficientnet_b7_ns', out_dim = self.out_dim)
+
+        if self.args.cuda:
+            model = model.cuda()
 
         # Loss Function
-        tmp = np.sqrt(1 / np.sqrt(self.training_set['landmark_id'].value_counts().sort_index().values))
+        tmp = np.sqrt(1 / np.sqrt(self.train_set['landmark_id'].value_counts().sort_index().values))
         margins = (tmp - tmp.min()) / (tmp.max() - tmp.min()) * 0.45 + 0.05
 
         def loss_fn(logits_m, target):
             return ArcFaceLossAdaptiveMargin(margins = margins, s = 80)(logits_m, target, self.out_dim)
 
         # Optimizer
-        optimizer = optim.SGD(model.parameters(), lr = self.args.lr, momentum = 0.9, weight_decay = 1e-5)
+        optimizer = torch.optim.SGD(model.parameters(), lr = self.args.lr, momentum = 0.9, weight_decay = 1e-5)
         
         # Adaptive LR
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, self.args.epochs)
@@ -82,13 +94,13 @@ class Landmark():
             return torch.utils.data.dataloader.default_collate(list(filter(lambda x: x is not None, batch)))
 
         # Set model file name.
-        model_file = os.path.join(self.args.img_dir, f'{self.args.name}.pth')
+        model_file = os.path.join(self.args.model_dir, f'{self.args.name}.pth')
 
         # Set variable for previous Micro AP score.
         prev_val_map = 0.0
 
         # Run training!
-        for epoch in range(1, self.epochs + 1):
+        for epoch in range(1, self.args.epochs + 1):
             print(time.ctime(), 'Epoch:', epoch)
 
             lr_scheduler.step(epoch - 1)
@@ -121,7 +133,9 @@ class Landmark():
         train_loss = []
 
         for (data, target) in tqdm(loader):
-            data, target = data.cuda(), target.cuda()
+
+            if self.args.cuda:
+                data, target = data.cuda(), target.cuda()
             optimizer.zero_grad()
 
             logits_m = model(data)
@@ -129,7 +143,8 @@ class Landmark():
             loss.backward()
             optimizer.step()
 
-            torch.cuda.synchronize()
+            if self.args.cuda:
+                torch.cuda.synchronize()
                 
             loss_np = loss.detach().cpu().numpy()
             train_loss.append(loss_np)
@@ -146,7 +161,8 @@ class Landmark():
 
         with torch.no_grad():
             for (data, target) in tqdm(loader):
-                data, target = data.cuda(), target.cuda()
+                if self.args.cuda:
+                    data, target = data.cuda(), target.cuda()
 
                 logits_m = model(data)
 
@@ -182,7 +198,7 @@ class Landmark():
         freq = pd.DataFrame(df['landmark_id'].value_counts())
         freq.reset_index(inplace = True)
         freq.columns = ['landmark_id', 'count']
-        freq = freq[freq['count'] >= self.min_img_per_label]
+        freq = freq[freq['count'] >= self.args.min_img_per_label]
 
         # Obtain filtered images.
         df_filtered = df.merge(freq, on=['landmark_id'], how='right')
@@ -198,7 +214,7 @@ class Landmark():
         print(f'Out dimension is {self.out_dim}.')
     
     def split_images(self, train = 0.7, cv = 0.2, test = 0.1):
-        if self.images == None:
+        if self.images is None:
             print("Images are not loaded.")
             return
         
@@ -210,10 +226,12 @@ class Landmark():
         print(f'CV set contains {self.cv_set.shape[0]} images.')
         print(f'Test set contains {self.test_set.shape[0]} images.')
 
-    def seed(s = 0):
+    def seed(self, s = 0):
         random.seed(s)
         np.random.seed(s)
         torch.manual_seed(s)
-        torch.cuda.manual_seed(s)
-        torch.cuda.manual_seed_all(s)
-        torch.backends.cudnn.deterministic = True
+
+        if self.args.cuda:
+            torch.cuda.manual_seed(s)
+            torch.cuda.manual_seed_all(s)
+            torch.backends.cudnn.deterministic = True

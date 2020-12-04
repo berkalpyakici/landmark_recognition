@@ -12,17 +12,19 @@ def getargs():
     parser.add_argument('--mode', type = str, required = True)
     parser.add_argument('--img-dir', type = str, required = True)
     parser.add_argument('--log-dir', type = str, required = True)
+    parser.add_argument('--model-dir', type = str, required = True)
     parser.add_argument('--name', type = str, required = True)
 
-    parser.add_argument('--img-dim', type = int, default = 64)
-    parser.add_argument('--batch-size', type = int, default = 42)
+    parser.add_argument('--cuda', type = int, default = 1)
+    parser.add_argument('--img-dim', type = int, default = 32)
+    parser.add_argument('--batch-size', type = int, default = 48)
     parser.add_argument('--num-workers', type = int, default = 32)
     parser.add_argument('--min-img-per-label', type = int, default = 100) # Minimum number of images per label.
     parser.add_argument('--lr', type = float, default = 0.0001)
     parser.add_argument('--epochs', type = int, default = 20)
 
     parsed_args, _ = parser.parse_known_args()
-    return args
+    return parsed_args
 
 def make_transform_train(hor_dim, ver_dim):
     return albumentations.Compose([
