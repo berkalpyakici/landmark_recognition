@@ -8,7 +8,7 @@ if __name__ == "__main__":
 
     os.makedirs(args.model_dir, exist_ok=True)
     os.makedirs(args.log_dir, exist_ok=True)
-    os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     
     if args.mode == "train":
         lndmrk = Landmark(args)

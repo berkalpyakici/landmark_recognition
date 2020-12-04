@@ -1,5 +1,5 @@
 import os
-import csv
+import cv2
 import random
 import torch
 import time
@@ -10,7 +10,7 @@ import pandas as pd
 from torch.utils.data import TensorDataset, DataLoader, Dataset
 
 from utilities import make_transform_train, make_transform_val, global_average_precision_score
-from models import Effnet_Landmark
+from models import Effnet_Landmark, ArcMarginProduct
 
 class Images(torch.utils.data.Dataset):
     def __init__(self, csv, img_dim, transform = None, withlabel = True):
@@ -68,7 +68,11 @@ class Landmark():
             return
 
         # Load Dataset
-        dataset = Images(self.train_set, self.args.img_dim, transform = make_transform_train(self.args.img_dim, self.args.img_dim), withlabel = True)
+        train_dataset = Images(self.train_set, self.args.img_dim, transform = make_transform_train(self.args.img_dim, self.args.img_dim), withlabel = True)
+        valid_dataset = Images(self.cv_set, self.args.img_dim, transform = make_transform_val(self.args.img_dim, self.args.img_dim), withlabel = True)
+
+        valid_loader = DataLoader(valid_dataset, batch_size = self.args.batch_size, num_workers = self.args.num_workers, drop_last = True)        
+
 
         # Init Model
         model = Effnet_Landmark('tf_efficientnet_b7_ns', out_dim = self.out_dim)
@@ -77,21 +81,15 @@ class Landmark():
             model = model.cuda()
 
         # Loss Function
-        tmp = np.sqrt(1 / np.sqrt(self.train_set['landmark_id'].value_counts().sort_index().values))
-        margins = (tmp - tmp.min()) / (tmp.max() - tmp.min()) * 0.45 + 0.05
-
         def loss_fn(logits_m, target):
-            return ArcFaceLossAdaptiveMargin(margins = margins, s = 80)(logits_m, target, self.out_dim)
+            arc = ArcMarginProduct(self.out_dim, self.args.batch_size)
+            return arc(logits_m, target)
 
         # Optimizer
         optimizer = torch.optim.SGD(model.parameters(), lr = self.args.lr, momentum = 0.9, weight_decay = 1e-5)
         
         # Adaptive LR
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, self.args.epochs)
-
-        # Collate Function
-        def collate_fn(batch):
-            return torch.utils.data.dataloader.default_collate(list(filter(lambda x: x is not None, batch)))
 
         # Set model file name.
         model_file = os.path.join(self.args.model_dir, f'{self.args.name}.pth')
@@ -105,10 +103,10 @@ class Landmark():
 
             lr_scheduler.step(epoch - 1)
 
-            loader = DataLoader(dataset, batch_size = self.args.batch_size, num_workers = self.args.num_workers, drop_last = True, collate_fn = collate_fn)        
+            train_loader = DataLoader(train_dataset, batch_size = self.args.batch_size, num_workers = self.args.num_workers, drop_last = True)        
 
-            train_loss = self.train_epoch(model, loader, optimizer, loss_fn)
-            val_loss, val_ac, val_map = val_epoch(model, loader, loss_fn)
+            train_loss = self.train_epoch(model, train_loader, optimizer, loss_fn)
+            val_loss, val_ac, val_map = self.val_epoch(model, valid_loader, loss_fn)
 
             print(time.ctime() + ' ' + f'Epoch {epoch}, LR: {optimizer.param_groups[0]["lr"]:.7f}, Train Loss: {np.mean(train_loss):.5f}, Val Loss: {(val_loss):.5f}')
             print(time.ctime() + ' ' + f'Epoch {epoch}, Val Acc {(val_acc):.6f}, Val Micro AP: {(val_map):.6f}')
@@ -129,25 +127,39 @@ class Landmark():
             print('Saving model...')
 
     def train_epoch(self, model, loader, optimizer, loss_fn):
+        #print("we doing things now")
         model.train()
+        print("yay we trained")
         train_loss = []
 
-        for (data, target) in tqdm(loader):
+        bar = tqdm(loader)
 
+        #print("hel")
+        # print(bar)
+
+        for i, (data, target) in enumerate(bar):
+            
+            print("starting training")
             if self.args.cuda:
                 data, target = data.cuda(), target.cuda()
             optimizer.zero_grad()
+            print("zeroed")
 
             logits_m = model(data)
+            print("got logits")
             loss = loss_fn(logits_m, target)
+            print("computed loss")
             loss.backward()
+            print("went backwards")
             optimizer.step()
+            print("stepped forward")
 
             if self.args.cuda:
                 torch.cuda.synchronize()
                 
             loss_np = loss.detach().cpu().numpy()
             train_loss.append(loss_np)
+            print("added loss")
             bar.set_description('Loss: %.5f' % (loss_np))
         
         return train_loss
@@ -160,7 +172,7 @@ class Landmark():
         TARGETS = []
 
         with torch.no_grad():
-            for (data, target) in tqdm(loader):
+            for i, (data, target) in enumerate(tqdm(loader)):
                 if self.args.cuda:
                     data, target = data.cuda(), target.cuda()
 
