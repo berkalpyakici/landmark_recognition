@@ -81,9 +81,11 @@ class Landmark():
             model = model.cuda()
 
         # Loss Function
+        tmp = np.sqrt(1 / np.sqrt(self.train_set['landmark_id'].value_counts().sort_index().values))
+        margins = (tmp - tmp.min()) / (tmp.max() - tmp.min()) * 0.45 + 0.05
+
         def loss_fn(logits_m, target):
-            arc = ArcMarginProduct(self.out_dim, self.args.batch_size)
-            return arc(logits_m, target)
+            return ArcFaceLossAdaptiveMargin(margins = margins, s = 80)(logits_m, target, self.out_dim)
 
         # Optimizer
         optimizer = torch.optim.SGD(model.parameters(), lr = self.args.lr, momentum = 0.9, weight_decay = 1e-5)
@@ -215,6 +217,9 @@ class Landmark():
         # Obtain filtered images.
         df_filtered = df.merge(freq, on=['landmark_id'], how='right')
         df_filtered.reset_index(inplace = True)
+
+        landmark_id2idx = {landmark_id: idx for idx, landmark_id in enumerate(sorted(df_filtered['landmark_id'].unique()))}
+        df_filtered['landmark_id'] = df_filtered['landmark_id'].map(landmark_id2idx)
         
         # Filter out old columns.
         self.images = df_filtered[['id', 'landmark_id', 'filepath']]
