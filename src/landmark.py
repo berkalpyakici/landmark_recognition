@@ -103,7 +103,7 @@ class Landmark():
 
         # Run training!
         for epoch in range(1, self.args.epochs + 1):
-            append_to_log(self.args, time.ctime() + ' Epoch: ' + str(epoch), True)
+            append_to_log(self.args, time.ctime() + ' Started Epoch ' + str(epoch), True)
 
             lr_scheduler.step(epoch - 1)
 
