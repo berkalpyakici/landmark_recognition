@@ -9,7 +9,7 @@ import pandas as pd
 
 from torch.utils.data import TensorDataset, DataLoader, Dataset
 
-from utilities import make_transform_train, make_transform_val, global_average_precision_score
+from utilities import make_transform_train, make_transform_val, global_average_precision_score, append_to_log
 from models import Effnet_Landmark, ArcFaceLossAdaptiveMargin
 
 class Images(torch.utils.data.Dataset):
@@ -57,7 +57,7 @@ class Landmark():
 
         self.out_dim = 0
 
-        self.seed()
+        self.seed(self.args.seed)
 
         if self.args.cuda:
             torch.cuda.set_device(0)
@@ -102,7 +102,7 @@ class Landmark():
 
         # Run training!
         for epoch in range(1, self.args.epochs + 1):
-            print(time.ctime(), 'Epoch:', epoch)
+            append_to_log(self.args, time.ctime() + ' Epoch: ' + str(epoch), True)
 
             lr_scheduler.step(epoch - 1)
 
@@ -111,16 +111,8 @@ class Landmark():
             train_loss = self.train_epoch(model, train_loader, optimizer, loss_fn)
             val_loss, val_acc, val_map = self.val_epoch(model, valid_loader, loss_fn)
 
-            msg1 = time.ctime() + ' ' + f'Epoch {epoch}, LR: {optimizer.param_groups[0]["lr"]:.7f}, Train Loss: {np.mean(train_loss):.5f}, Val Loss: {(val_loss):.5f}'
-            msg2 = time.ctime() + ' ' + f'Epoch {epoch}, Val Acc {(val_acc):.6f}, Val Micro AP: {(val_map):.6f}'
-            print(msg1)
-            print(msg2)
-            
-            with open(os.path.join(self.args.log_dir, f'{self.args.name}.txt'), 'a') as f:
-                f.write(msg1 + '\n')
-                f.write(msg2 + '\n')
-
-            print('Val Micro AP ({:.6f} --> {:.6f})'.format(prev_val_map, val_map))
+            append_to_log(self.args, time.ctime() + ' ' + f'Epoch {epoch}, LR: {optimizer.param_groups[0]["lr"]:.7f}, Train Loss: {np.mean(train_loss):.5f}, Val Loss: {(val_loss):.5f}', True)
+            append_to_log(self.args, time.ctime() + ' ' + f'Epoch {epoch}, Val Acc {(val_acc):.6f}, Val Micro AP ({(prev_val_map):.6f} --> {(val_map):.6f})', True)
 
             prev_val_map = val_map
             
@@ -130,15 +122,12 @@ class Landmark():
                         'optimizer_state_dict': optimizer.state_dict(),
                         }, model_file)
 
-            print('Saving model...')
-        
+            append_to_log(self.args, 'Saving model...', True)
+            append_to_log(self.args, '', True)
+
         test_loss, test_acc, test_map = self.val_epoch(model, test_loader, loss_fn)
 
-        msg = time.ctime() + ' ' + f'Test Loss {(test_loss):.6f}, Test Acc {(test_acc):.6f}, Test Micro AP: {(test_map):.6f}'
-        print(msg)
-
-        with open(os.path.join(self.args.log_dir, f'{self.args.name}.txt'), 'a') as f:
-                f.write(msg + '\n')
+        append_to_log(self.args, time.ctime() + ' ' + f'Test Loss {(test_loss):.6f}, Test Acc {(test_acc):.6f}, Test Micro AP: {(test_map):.6f}', True)
 
     def train_epoch(self, model, loader, optimizer, loss_fn):
         model.train()
@@ -226,21 +215,29 @@ class Landmark():
         # Set out_dim.
         self.out_dim = self.images['landmark_id'].nunique()
 
-        print(f'Loaded {self.images.shape[0]} images.')
-        print(f'Out dimension is {self.out_dim}.')
+        append_to_log(self.args, f'Loaded {self.images.shape[0]} images with total {self.out_dim} unique labels.', True)
     
     def split_images(self, train = 0.7, cv = 0.2, test = 0.1):
         if self.images is None:
-            print("Images are not loaded.")
+            append_to_log(self.args, 'Images are not loaded.', True)
             return
         
-        self.train_set = self.images.sample(frac = train).reset_index(drop = True)
-        self.cv_set = self.images.sample(frac = cv).reset_index(drop = True)
-        self.test_set = self.images.sample(frac = test).reset_index(drop = True)
+        if train + cv + test >= 1:
+            append_to_log(self.args, f'The requested size for train, cv, and test do not add up to 1. The ratios add up to {train + cv + test}.', True)
+            return
 
-        print(f'Training set contains {self.train_set.shape[0]} images.')
-        print(f'CV set contains {self.cv_set.shape[0]} images.')
-        print(f'Test set contains {self.test_set.shape[0]} images.')
+        self.train_set, self.cv_set, self.test_set = np.split(self.images.sample(frac = 1.0, random_state = self.args.seed), [int(train * len(self.images)), int((train + cv) * len(self.images))])
+
+        append_to_log(self.args, '', True)
+        append_to_log(self.args, f'Training Set: {self.train_set.shape[0]} images.', True)
+        append_to_log(self.args, f'CV Set: {self.cv_set.shape[0]} images.', True)
+        append_to_log(self.args, f'Test Set: {self.test_set.shape[0]} images.', True)
+        append_to_log(self.args, '', True)
+
+        self.train_set.to_csv(os.path.join(self.args.log_dir, f'{self.args.name}-train_set.csv'), index=False)
+        self.cv_set.to_csv(os.path.join(self.args.log_dir, f'{self.args.name}-cv_set.csv'), index=False)
+        self.test_set.to_csv(os.path.join(self.args.log_dir, f'{self.args.name}-test_set.csv'), index=False)
+
 
     def seed(self, s = 0):
         random.seed(s)

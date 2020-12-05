@@ -1,5 +1,6 @@
 import argparse
 import albumentations
+import os
 
 from typing import Dict, Tuple, Any
 
@@ -16,6 +17,7 @@ def getargs():
     parser.add_argument('--name', type = str, required = True)
 
     parser.add_argument('--cuda', type = int, default = 1)
+    parser.add_argument('--seed', type = int, default = 0)
     parser.add_argument('--img-dim', type = int, default = 128)
     parser.add_argument('--batch-size', type = int, default = 48)
     parser.add_argument('--num-workers', type = int, default = 4)
@@ -74,3 +76,10 @@ def global_average_precision_score(
         total_score += precision_at_rank_i * relevance_of_prediction_i
 
     return 1 / queries_with_target * total_score
+
+def append_to_log(args, msg, print_to_console = True):
+    with open(os.path.join(args.log_dir, f'{args.name}-log.txt'), 'a') as f:
+        f.write(msg + '\n')
+    
+    if print_to_console:
+        print(msg)
