@@ -72,20 +72,28 @@ class ArcMarginProduct_subcenter(nn.Module):
         return cosine   
 
 class ArcFaceLossAdaptiveMargin(nn.modules.Module):
-    def __init__(self, margins, s=30.0):
+    def __init__(self, margins, s = 30.0, cuda = True):
         super().__init__()
         self.crit = DenseCrossEntropy()
         self.s = s
         self.margins = margins
+        self.cuda = cuda
             
     def forward(self, logits, labels, out_dim):
         ms = []
         ms = self.margins[labels.cpu().numpy()]
         #ms = self.margins
-        cos_m = torch.from_numpy(np.cos(ms)).float().cuda()
-        sin_m = torch.from_numpy(np.sin(ms)).float().cuda()
-        th = torch.from_numpy(np.cos(math.pi - ms)).float().cuda()
-        mm = torch.from_numpy(np.sin(math.pi - ms) * ms).float().cuda()
+        cos_m = torch.from_numpy(np.cos(ms)).float()
+        sin_m = torch.from_numpy(np.sin(ms)).float()
+        th = torch.from_numpy(np.cos(math.pi - ms)).float()
+        mm = torch.from_numpy(np.sin(math.pi - ms) * ms).float()
+
+        if self.cuda:
+            cos_m = cos_m.cuda()
+            sin_m = sin_m.cuda()
+            th = th.cuda()
+            mm = mm.cuda()
+
         labels = F.one_hot(labels, out_dim).float()
         logits = logits.float()
         cosine = logits

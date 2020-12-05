@@ -13,9 +13,9 @@ from utilities import make_transform_train, make_transform_val, global_average_p
 from models import Effnet_Landmark, ArcFaceLossAdaptiveMargin
 
 class Images(torch.utils.data.Dataset):
-    def __init__(self, csv, img_dim, transform = None, withlabel = True):
+    def __init__(self, csv, args, transform = None, withlabel = True):
         self.csv = csv.reset_index()
-        self.img_dim = img_dim
+        self.args = args
         self.transform = transform
         self.withlabel = withlabel
     
@@ -32,11 +32,12 @@ class Images(torch.utils.data.Dataset):
                 res = self.transform(image = image)
                 image = res['image'].astype(np.float32)
         else:
-            # TODO: FIX THIS. PYTORCH DOESNT LIKE EMPTY TENSORS
+            append_to_log(self.args, 'Failed to locate image "' + row['filepath'] + '".', True)
+
             if self.withlabel:
-                return torch.tensor(np.zeros(shape = (self.img_dim, self.img_dim))), torch.tensor(0)
+                return torch.tensor(np.zeros(shape = (3, self.args.img_dim, self.args.img_dim), dtype=np.float32)), torch.tensor(0)
             else:
-                return torch.tensor(np.zeros(shape = (self.img_dim, self.img_dim)))
+                return torch.tensor(np.zeros(shape = (3, self.args.img_dim, self.args.img_dim), dtype=np.float32))
         
         image = image.astype(np.float32).transpose(2, 0, 1)
 
@@ -68,9 +69,9 @@ class Landmark():
             return
 
         # Load Dataset
-        train_dataset = Images(self.train_set, self.args.img_dim, transform = make_transform_train(self.args.img_dim, self.args.img_dim), withlabel = True)
-        valid_dataset = Images(self.cv_set, self.args.img_dim, transform = make_transform_val(self.args.img_dim, self.args.img_dim), withlabel = True)
-        test_dataset = Images(self.test_set, self.args.img_dim, transform = make_transform_val(self.args.img_dim, self.args.img_dim), withlabel = True)
+        train_dataset = Images(self.train_set, self.args, transform = make_transform_train(self.args.img_dim, self.args.img_dim), withlabel = True)
+        valid_dataset = Images(self.cv_set, self.args, transform = make_transform_val(self.args.img_dim, self.args.img_dim), withlabel = True)
+        test_dataset = Images(self.test_set, self.args, transform = make_transform_val(self.args.img_dim, self.args.img_dim), withlabel = True)
 
         valid_loader = DataLoader(valid_dataset, batch_size = self.args.batch_size, num_workers = self.args.num_workers, drop_last = True)        
         test_loader = DataLoader(test_dataset, batch_size = self.args.batch_size, num_workers = self.args.num_workers, drop_last = True)        
@@ -86,7 +87,7 @@ class Landmark():
         margins = (tmp - tmp.min()) / (tmp.max() - tmp.min()) * 0.45 + 0.05
 
         def loss_fn(logits_m, target):
-            return ArcFaceLossAdaptiveMargin(margins = margins, s = 80)(logits_m, target, self.out_dim)
+            return ArcFaceLossAdaptiveMargin(margins = margins, s = 80, cuda = False)(logits_m, target, self.out_dim)
 
         # Optimizer
         optimizer = torch.optim.SGD(model.parameters(), lr = self.args.lr, momentum = 0.9, weight_decay = 1e-5)
