@@ -136,3 +136,4 @@ logs/
 logs_lightning/default/
 *.whl
 *.pth
+*.csv
