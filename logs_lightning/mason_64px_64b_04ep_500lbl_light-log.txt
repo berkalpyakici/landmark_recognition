@@ -1,0 +1,24 @@
+Loaded 45579 images with total 51 unique labels.
+
+Training Set: 31905 images.
+CV Set: 9116 images.
+Test Set: 4558 images.
+
+Loaded 45579 images with total 51 unique labels.
+
+Training Set: 31905 images.
+CV Set: 9116 images.
+Test Set: 4558 images.
+
+Loaded 45579 images with total 51 unique labels.
+
+Training Set: 31905 images.
+CV Set: 9116 images.
+Test Set: 4558 images.
+
+Loaded 45579 images with total 51 unique labels.
+
+Training Set: 31905 images.
+CV Set: 9116 images.
+Test Set: 4558 images.
+

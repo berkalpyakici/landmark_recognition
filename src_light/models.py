@@ -39,6 +39,9 @@ class ArcFaceLoss(pl.LightningModule):
         
     def forward(self, logits, labels):
 
+        #logits = logits.detach().cpu().numpy()
+        #labels = labels.detach().cpu().numpy()
+
         logits = logits.float()
         cosine = logits
         sine = torch.sqrt(1.0 - torch.pow(cosine, 2))
@@ -107,7 +110,7 @@ class Effnet_Landmark(pl.LightningModule):
                 nn.ReLU()
             )
 
-        self.head = ArcMarginProduct(self.embedding_size, 2)
+        self.head = ArcMarginProduct(self.embedding_size, self.out_features)
     
     def forward(self, x):
         x = self.effnet.forward_features(x)

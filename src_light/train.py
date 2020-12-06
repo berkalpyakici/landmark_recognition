@@ -36,7 +36,6 @@ class Images(torch.utils.data.Dataset):
         if os.path.exists(row['filepath']):
             image = cv2.imread(row['filepath'])[:, :, ::-1]
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            #image = image.astype(np.float32)
 
             if self.transform is not None:
                 res = self.transform(image = image)
@@ -58,91 +57,6 @@ class Images(torch.utils.data.Dataset):
 
     def to_torch_tensor(self,img):
         return torch.from_numpy(img.transpose((2, 0, 1)))
-
-class LandmarkData():
-    def __init__(self, args):
-        self.args = args
-
-        # Set of Images and Split Sets (Training, CV, Tets)
-        self.images = None
-        self.train_set = None
-        self.cv_set = None
-        self.test_set = None
-
-        self.out_dim = 0
-
-        #self.set_seed(self.args.seed)
-    
-    def get_datasets(self):
-        self.load_images()
-        self.split_images()
-
-        if self.train_set is None:
-            print('Training set is not loaded.')
-            return
-
-        # Load Dataset
-        train_dataset = Images(self.train_set, self.args, transform = make_transform_train(self.args.img_dim, self.args.img_dim), withlabel = True)
-        valid_dataset = Images(self.cv_set, self.args, transform = make_transform_val(self.args.img_dim, self.args.img_dim), withlabel = True)
-        test_dataset = Images(self.test_set, self.args, transform = make_transform_val(self.args.img_dim, self.args.img_dim), withlabel = True)
-
-        return train_dataset, valid_dataset, test_dataset
-
-    def load_images(self):
-        # Load all images.
-        df = pd.read_csv(os.path.join(self.args.img_dir, 'train.csv'))
-        df['filepath'] = df['id'].apply(lambda x: os.path.join(self.args.img_dir, 'train', x[0], x[1], x[2], f'{x}.jpg'))
-
-        # Get landmark ids that have more than min_landmark_count images.
-        freq = pd.DataFrame(df['landmark_id'].value_counts())
-        freq.reset_index(inplace = True)
-        freq.columns = ['landmark_id', 'count']
-        freq = freq[freq['count'] >= self.args.min_img_per_label]
-
-        # Obtain filtered images.
-        df_filtered = df.merge(freq, on=['landmark_id'], how='right')
-        df_filtered.reset_index(inplace = True)
-
-        landmark_id2idx = {landmark_id: idx for idx, landmark_id in enumerate(sorted(df_filtered['landmark_id'].unique()))}
-        df_filtered['landmark_id'] = df_filtered['landmark_id'].map(landmark_id2idx)
-        
-        # Filter out old columns.
-        self.images = df_filtered[['id', 'landmark_id', 'filepath']]
-
-        # Set out_dim.
-        self.out_dim = self.images['landmark_id'].nunique()
-
-        append_to_log(self.args, f'Loaded {self.images.shape[0]} images with total {self.out_dim} unique labels.', True)
-    
-    def split_images(self, train = 0.7, cv = 0.2, test = 0.1):
-        if self.images is None:
-            append_to_log(self.args, 'Images are not loaded.', True)
-            return
-        
-        if train + cv + test >= 1:
-            append_to_log(self.args, f'The requested size for train, cv, and test do not add up to 1. The ratios add up to {train + cv + test}.', True)
-            return
-
-        self.train_set, self.cv_set, self.test_set = np.split(self.images.sample(frac = 1.0, random_state = self.args.seed), [int(train * len(self.images)), int((train + cv) * len(self.images))])
-
-        append_to_log(self.args, '', True)
-        append_to_log(self.args, f'Training Set: {self.train_set.shape[0]} images.', True)
-        append_to_log(self.args, f'CV Set: {self.cv_set.shape[0]} images.', True)
-        append_to_log(self.args, f'Test Set: {self.test_set.shape[0]} images.', True)
-        append_to_log(self.args, '', True)
-
-        self.train_set.to_csv(os.path.join(self.args.log_dir, f'{self.args.name}-train_set.csv'), index=False)
-        self.cv_set.to_csv(os.path.join(self.args.log_dir, f'{self.args.name}-cv_set.csv'), index=False)
-        self.test_set.to_csv(os.path.join(self.args.log_dir, f'{self.args.name}-test_set.csv'), index=False)
-
-    def set_seed(self, seed=303):
-        random.seed(seed)
-        os.environ['PYTHONHASHSEED'] = str(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
-        torch.backends.cudnn.deterministic = False
-        torch.backends.cudnn.benchmark = True
 
 class LandmarkDataModule(pl.LightningDataModule):
     def __init__(self, args):
@@ -246,24 +160,26 @@ class LandmarkDataModule(pl.LightningDataModule):
         return self.out_dim
 
 class LandmarkClassifier(pl.LightningModule):
-    def __init__(self, args, model, out_dim):
+    def __init__(self, args, model, dataModule):
         super().__init__()
         self.model = model
         self.args = args
 
-        self.learning_rate = self.args.lr
+        self.loss_fn = ArcFaceLoss()
 
         self.accuracy = pl.metrics.Accuracy()
-        self.out_dim = out_dim
+        self.data_module = dataModule
 
     def training_step(self, batch, batch_idx):
         x, y = batch
 
         y_hat = self.model(x)
-        #loss = ArcFaceLoss()(y_hat, y)
-        loss = nn.CrossEntropyLoss()(y_hat, y) * 1.0
+        loss = self.loss_fn(y_hat, y) * 1.0
+        #loss = nn.CrossEntropyLoss()(y_hat, y) * 1.0
 
-        self.log('train_loss', loss, prog_bar = True)
+        #self.log('train_loss', loss, prog_bar = True)
+
+        #append_to_log(self.args, time.ctime() + ' ' + f'Epoch {self.current_epoch}, Train Loss: {loss:.5f}', True)
 
         return loss    
     
@@ -271,20 +187,21 @@ class LandmarkClassifier(pl.LightningModule):
         x, y = batch
 
         y_hat = self.model(x)
+        preds_conf, preds = torch.max(y_hat,1)
 
-        preds_conf, preds = torch.max(y_hat.softmax(1),1)
-
-        loss = nn.CrossEntropyLoss()(y_hat, y)
+        #loss = nn.CrossEntropyLoss()(y_hat, y)
+        loss = self.loss_fn(y_hat, y) * 1.0
 
         acc = self.accuracy(y_hat, y)
-        #gap = global_average_precision_score(y_hat, y)
 
-        self.log('val_loss', loss, prog_bar=True, logger=True)
+        #self.log('val_loss', loss, prog_bar=True, logger=True)
         self.log('val_acc', acc, prog_bar=True, logger=True)
+
+        append_to_log(self.args, time.ctime() + ' ' + f'Epoch {self.current_epoch}, Val Loss: {(loss):.5f}, Val Acc {(acc):.6f}', False)
 
         metrics = dict({
                 'preds': preds,
-                'preds_conf':preds_conf,
+                'preds_conf': preds_conf,
                 'targets': y,
             })    
 
@@ -298,9 +215,11 @@ class LandmarkClassifier(pl.LightningModule):
         for key in out_val.keys():
             out_val[key] = out_val[key].detach().cpu().numpy().astype(np.float32)
 
-        val_score = global_average_precision_score(self.out_dim, out_val["targets"], [out_val["preds"], out_val["preds_conf"]])
+        gap = global_average_precision_score(self.data_module.get_dim(), out_val["targets"], [out_val["preds"], out_val["preds_conf"]])
 
-        self.log('val_gap', val_score, prog_bar=True, logger=True)
+        self.log('val_gap', gap, prog_bar=True, logger=True)
+
+        append_to_log(self.args, time.ctime() + ' ' + f'CV Micro AP: {(gap):.6f}', False)
     
     def test_step(self, batch, batch_idx):
         x, y = batch
@@ -309,13 +228,16 @@ class LandmarkClassifier(pl.LightningModule):
 
         preds_conf, preds = torch.max(y_hat.softmax(1),1)
 
-        loss = nn.CrossEntropyLoss()(y_hat, y)
+        #loss = nn.CrossEntropyLoss()(y_hat, y)
+        loss = self.loss_fn(y_hat, y) * 1.0
 
         acc = self.accuracy(y_hat, y)
         #gap = global_average_precision_score(y_hat, y)
 
-        self.log('test_loss', loss, prog_bar=True, logger=True)
+        #self.log('test_loss', loss, prog_bar=True, logger=True)
         self.log('test_acc', acc, prog_bar=True, logger=True)
+
+        append_to_log(self.args, time.ctime() + ' ' + f'Test Loss {(loss):.6f}, Test Acc {(acc):.6f}', False)
 
         metrics = dict({
                 'preds': preds,
@@ -333,13 +255,15 @@ class LandmarkClassifier(pl.LightningModule):
         for key in out_val.keys():
             out_val[key] = out_val[key].detach().cpu().numpy().astype(np.float32)
 
-        val_score = global_average_precision_score(self.out_dim, out_val["targets"], [out_val["preds"], out_val["preds_conf"]])
+        gap = global_average_precision_score(self.data_module.get_dim(), out_val["targets"], [out_val["preds"], out_val["preds_conf"]])
 
-        self.log('test_gap', val_score, prog_bar=True, logger=True)
+        self.log('test_gap', gap, prog_bar=True, logger=True)
+
+        append_to_log(self.args, time.ctime() + ' ' + f'Test Micro AP: {(gap):.6f}', True)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.SGD(self.model.parameters(), lr = self.args.lr, momentum = 0.9, weight_decay = 1e-5)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, self.args.epochs)
+        optimizer = torch.optim.SGD(self.model.parameters(), lr = 0.05, momentum = 0.9, weight_decay = 1e-4)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, self.args.epochs, verbose = True)
 
         return [optimizer], [scheduler]
 
@@ -351,16 +275,11 @@ if __name__ == '__main__':
 
     seed_everything(args.seed)
 
-    # Load Dataset
-    #data = LandmarkData(args)
-
-    #train_dataset, valid_dataset, test_dataset = data.get_datasets()
-
     data_module = LandmarkDataModule(args)
 
     # Define Model
     effnet = Effnet_Landmark()
-    model = LandmarkClassifier(args, effnet, data_module.get_dim())
+    model = LandmarkClassifier(args, effnet, data_module)
 
     # Logger
     tb_logger = loggers.TensorBoardLogger(args.log_dir)
@@ -369,6 +288,7 @@ if __name__ == '__main__':
     checkpoint_callback = ModelCheckpoint(
         monitor='val_gap',
         dirpath=args.model_dir,
+        mode = 'max',
         filename=args.name + '{epoch:02d}-{val_gap:.4f}')
 
     # Define trainer and fit to data

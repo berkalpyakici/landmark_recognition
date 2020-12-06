@@ -29,16 +29,13 @@ def getargs():
     parsed_args, _ = parser.parse_known_args()
     return parsed_args
 
-def global_average_precision_score(out_dim, y_true, y_pred, ignore_non_landmarks=False):
-    print(out_dim)
+def global_average_precision_score(out_dim, y_true, y_pred):
     indexes = np.argsort(y_pred[1])[::-1]
-    queries_with_target = (y_true < out_dim).sum()
+    queries_with_target = len(y_true)
     correct_predictions = 0
     total_score = 0.
     i = 1
     for k in indexes:
-        if ignore_non_landmarks and y_true[k] == out_dim:
-            continue
         if y_pred[0][k] == out_dim:
             continue
         relevance_of_prediction_i = 0
@@ -48,15 +45,7 @@ def global_average_precision_score(out_dim, y_true, y_pred, ignore_non_landmarks
         precision_at_rank_i = correct_predictions / i
         total_score += precision_at_rank_i * relevance_of_prediction_i
         i += 1
-    return 1 / queries_with_target * total_score
-
-def append_to_log(args, msg, print_to_console = True):
-    with open(os.path.join(args.log_dir, f'{args.name}-log.txt'), 'a') as f:
-        f.write(msg + '\n')
-    
-    if print_to_console:
-        print(msg)
-
+    return total_score / queries_with_target
 
 def append_to_log(args, msg, print_to_console = True):
     with open(os.path.join(args.log_dir, f'{args.name}-log.txt'), 'a') as f:

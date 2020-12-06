@@ -1,0 +1,12 @@
+Loaded 8503 images with total 2 unique labels.
+
+Training Set: 5952 images.
+CV Set: 1700 images.
+Test Set: 851 images.
+
+Loaded 8503 images with total 2 unique labels.
+
+Training Set: 5952 images.
+CV Set: 1700 images.
+Test Set: 851 images.
+
