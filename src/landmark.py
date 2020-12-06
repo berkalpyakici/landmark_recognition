@@ -191,6 +191,7 @@ class Landmark():
         gap_m = global_average_precision_score(y_true, y_pred_m)
         return val_loss, acc_m, gap_m
 
+
     def load_images(self):
         # Load all images.
         df = pd.read_csv(os.path.join(self.args.img_dir, 'train.csv'))
@@ -237,6 +238,7 @@ class Landmark():
         self.train_set.to_csv(os.path.join(self.args.log_dir, f'{self.args.name}-train_set.csv'), index=False)
         self.cv_set.to_csv(os.path.join(self.args.log_dir, f'{self.args.name}-cv_set.csv'), index=False)
         self.test_set.to_csv(os.path.join(self.args.log_dir, f'{self.args.name}-test_set.csv'), index=False)
+
 
     def seed(self, s = 0):
         random.seed(s)
