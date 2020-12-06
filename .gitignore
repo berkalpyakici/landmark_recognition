@@ -133,4 +133,6 @@ Data/
 weights/
 weights_final/
 logs/
+logs_lightning/default/
 *.whl
+*.pth
