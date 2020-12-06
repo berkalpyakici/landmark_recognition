@@ -83,27 +83,39 @@ class ArcFaceLossAdaptiveMargin(nn.modules.Module):
         ms = []
         ms = self.margins[labels.cpu().numpy()]
         #ms = self.margins
-        cos_m = torch.from_numpy(np.cos(ms)).float()
-        sin_m = torch.from_numpy(np.sin(ms)).float()
-        th = torch.from_numpy(np.cos(math.pi - ms)).float()
-        mm = torch.from_numpy(np.sin(math.pi - ms) * ms).float()
 
         if self.cuda:
-            cos_m = cos_m.cuda()
-            sin_m = sin_m.cuda()
-            th = th.cuda()
-            mm = mm.cuda()
+            cos_m = torch.from_numpy(np.cos(ms)).float().cuda()
+            sin_m = torch.from_numpy(np.sin(ms)).float().cuda()
+            th = torch.from_numpy(np.cos(math.pi - ms)).float().cuda()
+            mm = torch.from_numpy(np.sin(math.pi - ms) * ms).float().cuda()
 
-        labels = F.one_hot(labels, out_dim).float()
-        logits = logits.float()
-        cosine = logits
-        sine = torch.sqrt(1.0 - torch.pow(cosine, 2))
-        phi = cosine * cos_m.view(-1,1) - sine * sin_m.view(-1,1)
-        phi = torch.where(cosine > th.view(-1,1), phi, cosine - mm.view(-1,1))
-        output = (labels * phi) + ((1.0 - labels) * cosine)
-        output *= self.s
-        loss = self.crit(output, labels)
-        return loss
+            labels = F.one_hot(labels, out_dim).float()
+            logits = logits.float()
+            cosine = logits
+            sine = torch.sqrt(1.0 - torch.pow(cosine, 2))
+            phi = cosine * cos_m.view(-1,1) - sine * sin_m.view(-1,1)
+            phi = torch.where(cosine > th.view(-1,1), phi, cosine - mm.view(-1,1))
+            output = (labels * phi) + ((1.0 - labels) * cosine)
+            output *= self.s
+            loss = self.crit(output, labels)
+            return loss
+        else:
+            cos_m = torch.from_numpy(np.cos(ms)).float()
+            sin_m = torch.from_numpy(np.sin(ms)).float()
+            th = torch.from_numpy(np.cos(math.pi - ms)).float()
+            mm = torch.from_numpy(np.sin(math.pi - ms) * ms).float()
+
+            labels = F.one_hot(labels, out_dim).float()
+            logits = logits.float()
+            cosine = logits
+            sine = torch.sqrt(1.0 - torch.pow(cosine, 2))
+            phi = cosine * cos_m.view(-1,1) - sine * sin_m.view(-1,1)
+            phi = torch.where(cosine > th.view(-1,1), phi, cosine - mm.view(-1,1))
+            output = (labels * phi) + ((1.0 - labels) * cosine)
+            output *= self.s
+            loss = self.crit(output, labels)
+            return loss
 
 class Effnet_Landmark(nn.Module):
     def __init__(self, enet_type, out_dim):
