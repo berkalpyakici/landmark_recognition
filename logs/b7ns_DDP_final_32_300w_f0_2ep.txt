@@ -1,2 +1,0 @@
-Tue Nov 17 23:57:36 2020 Fold 0, Epoch 1, lr: 0.0001000, train loss: 30.28543, valid loss: 29.22821, acc_m: 17.269737, gap_m: 0.138640.
-Wed Nov 18 00:02:32 2020 Fold 0, Epoch 2, lr: 0.0001000, train loss: 28.23397, valid loss: 27.51363, acc_m: 20.723684, gap_m: 0.160738.
