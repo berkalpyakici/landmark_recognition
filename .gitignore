@@ -131,5 +131,6 @@ dmypy.json
 # landmark recognition stuff
 Data/
 weights/
+weights_final/
 logs/
 *.whl
