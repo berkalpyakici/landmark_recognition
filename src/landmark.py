@@ -87,7 +87,7 @@ class Landmark():
         margins = (tmp - tmp.min()) / (tmp.max() - tmp.min()) * 0.45 + 0.05
 
         def loss_fn(logits_m, target):
-            return ArcFaceLossAdaptiveMargin(margins = margins, s = 80, self.args.cuda)(logits_m, target, self.out_dim)
+            return ArcFaceLossAdaptiveMargin(margins = margins, s = 80, cuda = self.args.cuda)(logits_m, target, self.out_dim)
 
         # Optimizer
         optimizer = torch.optim.SGD(model.parameters(), lr = self.args.lr, momentum = 0.9, weight_decay = 1e-5)
