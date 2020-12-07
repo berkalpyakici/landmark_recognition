@@ -1,5 +1,0 @@
-Fri Dec  4 16:29:39 2020 Epoch 1, LR: 0.0010000, Train Loss: 6.15671, Val Loss: 1.60530
-Fri Dec  4 16:29:39 2020 Epoch 1, Val Acc 96.995192, Val Micro AP: 0.952712
-Fri Dec  4 16:30:17 2020 Epoch 2, LR: 0.0005000, Train Loss: 1.79993, Val Loss: 2.25751
-Fri Dec  4 16:30:17 2020 Epoch 2, Val Acc 95.192308, Val Micro AP: 0.893832
-Fri Dec  4 16:30:26 2020 Test Loss 2.186246, Test Acc 95.552885, Test Micro AP: 0.913156
