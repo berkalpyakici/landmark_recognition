@@ -64,3 +64,6 @@ Test Set: 4558 images.
 Mon Dec  7 02:13:20 2020 Epoch 0, CV Micro AP: 0.000464
 Mon Dec  7 02:16:27 2020 Epoch 0, CV Micro AP: 0.399878
 Mon Dec  7 02:19:33 2020 Epoch 1, CV Micro AP: 0.521076
+Mon Dec  7 02:22:41 2020 Epoch 2, CV Micro AP: 0.562420
+Mon Dec  7 02:25:48 2020 Epoch 3, CV Micro AP: 0.571164
+Mon Dec  7 02:26:06 2020 Test Micro AP: 0.596735
