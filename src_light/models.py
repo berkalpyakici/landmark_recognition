@@ -105,10 +105,10 @@ class Effnet_Landmark(pl.LightningModule):
 
         self.global_pool = nn.Identity()
         self.neck = nn.Sequential(
-                nn.Linear(self.out_features, self.embedding_size),
-                nn.BatchNorm1d(self.embedding_size),
-                nn.ReLU()
-            )
+            nn.Linear(self.out_features, self.embedding_size),
+            nn.BatchNorm1d(self.embedding_size),
+            nn.ReLU()
+        )
 
         self.head = ArcMarginProduct(self.embedding_size, self.out_features)
     

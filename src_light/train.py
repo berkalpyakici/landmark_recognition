@@ -35,7 +35,6 @@ class Images(torch.utils.data.Dataset):
 
         if os.path.exists(row['filepath']):
             image = cv2.imread(row['filepath'])[:, :, ::-1]
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
             if self.transform is not None:
                 res = self.transform(image = image)
@@ -44,19 +43,16 @@ class Images(torch.utils.data.Dataset):
             append_to_log(self.args, 'Failed to locate image "' + row['filepath'] + '".', True)
 
             if self.withlabel:
-                return self.to_torch_tensor(np.zeros(shape = (3, self.args.img_dim, self.args.img_dim), dtype=np.int8)), self.to_torch_tensor(0)
+                return torch.tensor(np.zeros(shape = (3, self.args.img_dim, self.args.img_dim), dtype=np.float32)), torch.tensor(0)
             else:
-                return self.to_torch_tensor(np.zeros(shape = (3, self.args.img_dim, self.args.img_dim), dtype=np.int8))
-        
+                return torch.tensor(np.zeros(shape = (3, self.args.img_dim, self.args.img_dim), dtype=np.float32))
+
         image = image.astype(np.float32).transpose(2, 0, 1)
 
         if self.withlabel: 
             return image, torch.tensor(row['landmark_id'])
         else:
             return image
-
-    def to_torch_tensor(self,img):
-        return torch.from_numpy(img.transpose((2, 0, 1)))
 
 class LandmarkDataModule(pl.LightningDataModule):
     def __init__(self, args):
@@ -71,9 +67,9 @@ class LandmarkDataModule(pl.LightningDataModule):
         ])
 
         self.val_transform = albumentations.Compose([
-                albumentations.Resize(args.img_dim, args.img_dim),
-                albumentations.Normalize()
-            ])
+            albumentations.Resize(args.img_dim, args.img_dim),
+            albumentations.Normalize()
+        ])
 
         # Set of Images and Split Sets (Training, CV, Tets)
         self.images = None
@@ -84,7 +80,9 @@ class LandmarkDataModule(pl.LightningDataModule):
         self.out_dim = 0
 
     def prepare_data(self):
-        # Load all images.
+        ########################################
+        # DATA LOADING AND FILTERING
+        ########################################
         df = pd.read_csv(os.path.join(self.args.img_dir, 'train.csv'))
         df['filepath'] = df['id'].apply(lambda x: os.path.join(self.args.img_dir, 'train', x[0], x[1], x[2], f'{x}.jpg'))
 
@@ -109,12 +107,9 @@ class LandmarkDataModule(pl.LightningDataModule):
 
         append_to_log(self.args, f'Loaded {self.images.shape[0]} images with total {self.out_dim} unique labels.', True)
 
-        ### DATA SPLITTING
-        if self.images is None:
-            append_to_log(self.args, 'Images are not loaded.', True)
-            return
-            
-        # Begin Data Splitting
+        ########################################
+        # DATA SPLITTING
+        ########################################
         train = 0.7
         cv = 0.2
         test = 0.1
@@ -135,26 +130,22 @@ class LandmarkDataModule(pl.LightningDataModule):
         self.cv_set.to_csv(os.path.join(self.args.log_dir, f'{self.args.name}-cv_set.csv'), index=False)
         self.test_set.to_csv(os.path.join(self.args.log_dir, f'{self.args.name}-test_set.csv'), index=False)
 
-
     def setup(self, stage = None):
         if stage == "fit" or stage is None:
-            self.train = Images(self.train_set, self.args, transform = self.train_transform, withlabel = True)
-            self.valid = Images(self.cv_set, self.args, transform = self.val_transform, withlabel = True)
-
-            self.dims = tuple(self.train[0][0].shape)
+            self.train_img = Images(self.train_set, self.args, transform = self.train_transform, withlabel = True)
+            self.cv_img = Images(self.cv_set, self.args, transform = self.val_transform, withlabel = True)
 
         if stage == "test" or stage is None:
-            self.test = Images(self.test_set, self.args, transform = self.val_transform, withlabel = True)
-            self.dims = tuple(self.test[0][0].shape)        
+            self.test_img = Images(self.test_set, self.args, transform = self.val_transform, withlabel = True)
 
     def train_dataloader(self):
-        return DataLoader(self.train, batch_size = self.args.batch_size, num_workers = self.args.num_workers, drop_last = True)
+        return DataLoader(self.train_img, batch_size = self.args.batch_size, num_workers = self.args.num_workers, drop_last = True)
 
     def val_dataloader(self):
-        return DataLoader(self.valid, batch_size = self.args.batch_size, num_workers = self.args.num_workers, drop_last = True)
+        return DataLoader(self.cv_img, batch_size = self.args.batch_size, num_workers = self.args.num_workers, drop_last = True)
 
     def test_dataloader(self):
-        return DataLoader(self.test, batch_size = self.args.batch_size, num_workers = self.args.num_workers, drop_last = True)
+        return DataLoader(self.test_img, batch_size = self.args.batch_size, num_workers = self.args.num_workers, drop_last = True)
     
     def get_dim(self):
         return self.out_dim

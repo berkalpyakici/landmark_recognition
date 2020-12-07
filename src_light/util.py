@@ -31,7 +31,7 @@ def getargs():
 
 def global_average_precision_score(out_dim, y_true, y_pred):
     indexes = np.argsort(y_pred[1])[::-1]
-    queries_with_target = len(y_true)
+    queries_with_target = (y_true < out_dim).sum()
     correct_predictions = 0
     total_score = 0.
     i = 1
