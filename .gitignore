@@ -134,3 +134,5 @@ weights/
 weights_final/
 logs/
 *.whl
+
+./vscode
