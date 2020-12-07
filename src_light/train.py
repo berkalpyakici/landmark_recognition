@@ -175,7 +175,7 @@ class LandmarkClassifier(pl.LightningModule):
         x, y = batch
 
         y_hat = self.model(x)
-        preds_conf, preds = torch.max(y_hat,1)
+        preds_conf, preds = torch.max(y_hat, 1)
 
         loss = self.loss_fn(y_hat, y) * 1.0
         acc = self.accuracy(y_hat, y)
@@ -240,7 +240,7 @@ class LandmarkClassifier(pl.LightningModule):
         append_to_log(self.args, time.ctime() + ' ' + f'Test Micro AP: {(gap):.6f}', True)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.SGD(self.model.parameters(), lr = 0.05, momentum = 0.9, weight_decay = 1e-4)
+        optimizer = torch.optim.SGD(self.model.parameters(), lr = 0.001, momentum = 0.9, weight_decay = 1e-5)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, self.args.epochs, verbose = True)
 
         return [optimizer], [scheduler]

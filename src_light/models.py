@@ -1,12 +1,9 @@
-import timm
-from torch import nn
-
 import math
 import torch
+from torch import nn
 from torch.nn import functional as F
 from torch.nn.parameter import Parameter
 
-from efficientnet_pytorch import EfficientNet
 import geffnet
 
 import pytorch_lightning as pl
@@ -57,7 +54,6 @@ class Effnet_Landmark(pl.LightningModule):
     def __init__(self, args, data_module):
         super().__init__()
 
-        #self.effnet = timm.create_model('tf_efficientnet_b7', pretrained=True)
         self.effnet = geffnet.create_model('tf_efficientnet_b7_ns', pretrained = True)
         self.in_features = self.effnet.classifier.in_features
         self.effnet.classifier = nn.Identity()

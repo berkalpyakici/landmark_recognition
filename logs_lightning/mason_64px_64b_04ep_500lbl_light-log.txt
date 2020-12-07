@@ -40,3 +40,14 @@ Training Set: 31905 images.
 CV Set: 9116 images.
 Test Set: 4558 images.
 
+Mon Dec  7 01:50:18 2020 Epoch 0, CV Micro AP: 0.000464
+Mon Dec  7 01:53:27 2020 Epoch 0, CV Micro AP: 0.030578
+Mon Dec  7 01:56:39 2020 Epoch 1, CV Micro AP: 0.030097
+Loaded 45579 images with total 51 unique labels.
+
+Training Set: 31905 images.
+CV Set: 9116 images.
+Test Set: 4558 images.
+
+Mon Dec  7 01:58:39 2020 Epoch 0, CV Micro AP: 0.000464
+Mon Dec  7 02:01:46 2020 Epoch 0, CV Micro AP: 0.367420
