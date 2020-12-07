@@ -273,7 +273,7 @@ if __name__ == '__main__':
         monitor='val_mAP',
         dirpath=args.model_dir,
         mode = 'max',
-        filename=args.name + '-{ep:02d}-{val_mAP:.4f}')
+        filename=args.name + '-{epoch:02d}-{val_mAP:.4f}')
 
     # Define trainer and fit to data
     trainer = Trainer(
