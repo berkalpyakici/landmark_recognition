@@ -12,9 +12,10 @@ import geffnet
 import pytorch_lightning as pl
 
 class ArcMarginProduct(pl.LightningModule):
-    def __init__(self, in_features, out_features):
+    def __init__(self, in_features, data_module):
         super().__init__()
-        self.weight = nn.Parameter(torch.Tensor(out_features, in_features))
+        print("TESTING HERE:",data_module.get_dim())
+        self.weight = nn.Parameter(torch.Tensor(data_module.get_dim(), in_features))
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -38,10 +39,6 @@ class ArcFaceLoss(pl.LightningModule):
         self.mm = math.sin(math.pi - m) * m
         
     def forward(self, logits, labels):
-
-        #logits = logits.detach().cpu().numpy()
-        #labels = labels.detach().cpu().numpy()
-
         logits = logits.float()
         cosine = logits
         sine = torch.sqrt(1.0 - torch.pow(cosine, 2))
@@ -56,66 +53,29 @@ class ArcFaceLoss(pl.LightningModule):
         loss = self.crit(output, labels)
         return loss
 
-class Backbone(nn.Module):
-    def __init__(self):
-        super(Backbone, self).__init__()
-        #self.net = timm.create_model('efficientnet_b7', pretrained=True)
-        self.out_features = self.net.classifier.in_features
-
-        self.eff = EfficientNet.from_pretrained('efficientnet-b7', advprop=True)
-        self.geff = geffnet.efficientnet_b7(pretrained=True, drop_rate=0.25, drop_connect_rate=0.2, as_sequential=True)
-
-    def forward(self, x):
-        return self.geff(x)
-        #return self.net.forward_features(x)
-
-class LandmarkModel(nn.Module):
-    def __init__(self):
-        super().__init__()
-        
-        self.backbone = Backbone()
-        self.global_pool = nn.Identity()
-        self.embedding_size = 512
-        
-        self.neck = nn.Sequential(
-            nn.Linear(self.backbone.out_features, self.embedding_size),
-            nn.BatchNorm1d(self.embedding_size),
-            nn.ReLU())
-            
-        self.head = ArcMarginProduct(512, self.backbone.out_features)
-
-    def forward(self, x):
-        x = self.backbone(x)
-        x = self.global_pool(x)
-        x = x[:,:,0,0]
-        
-        x = self.neck(x)
-        logits = self.head(x)
-        
-        return logits
-
 class Effnet_Landmark(pl.LightningModule):
-    def __init__(self, ):
+    def __init__(self, args, data_module):
         super().__init__()
 
-        self.effnet = timm.create_model('tf_efficientnet_b7', pretrained=True)
-        self.out_features = self.effnet.classifier.in_features
+        #self.effnet = timm.create_model('tf_efficientnet_b7', pretrained=True)
+        self.effnet = geffnet.create_model('tf_efficientnet_b7_ns', pretrained = True)
+        self.in_features = self.effnet.classifier.in_features
+        self.effnet.classifier = nn.Identity()
 
         self.embedding_size = 512
 
-        self.global_pool = nn.Identity()
+        self.global_pool = nn.Identity() #placeholder if we want to add pooling
         self.neck = nn.Sequential(
-            nn.Linear(self.out_features, self.embedding_size),
+            nn.Linear(self.in_features, self.embedding_size),
             nn.BatchNorm1d(self.embedding_size),
             nn.ReLU()
         )
 
-        self.head = ArcMarginProduct(self.embedding_size, self.out_features)
+        self.head = ArcMarginProduct(self.embedding_size, data_module)
     
     def forward(self, x):
-        x = self.effnet.forward_features(x)
-        x = self.global_pool(x)
-        x = x[:,:,0,0]
+        x = self.effnet(x)
+        #x = self.global_pool(x)
         x = self.neck(x)
 
         return self.head(x)

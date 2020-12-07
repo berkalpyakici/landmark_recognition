@@ -14,7 +14,7 @@ from torch.utils.data import random_split
 
 import pytorch_lightning as pl
 from pytorch_lightning import loggers, seed_everything, Trainer
-from pytorch_lightning import loggers
+from pytorch_lightning.tuner.tuning import Tuner
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 from models import *
@@ -58,6 +58,8 @@ class LandmarkDataModule(pl.LightningDataModule):
     def __init__(self, args):
         super().__init__()
         self.args = args
+
+        self.batch_size = args.batch_size
 
         self.train_transform = albumentations.Compose([
             albumentations.HorizontalFlip(p=0.5),
@@ -139,13 +141,13 @@ class LandmarkDataModule(pl.LightningDataModule):
             self.test_img = Images(self.test_set, self.args, transform = self.val_transform, withlabel = True)
 
     def train_dataloader(self):
-        return DataLoader(self.train_img, batch_size = self.args.batch_size, num_workers = self.args.num_workers, drop_last = True)
+        return DataLoader(self.train_img, batch_size = self.batch_size, num_workers = self.args.num_workers, drop_last = True)
 
     def val_dataloader(self):
-        return DataLoader(self.cv_img, batch_size = self.args.batch_size, num_workers = self.args.num_workers, drop_last = True)
+        return DataLoader(self.cv_img, batch_size = self.batch_size, num_workers = self.args.num_workers, drop_last = True)
 
     def test_dataloader(self):
-        return DataLoader(self.test_img, batch_size = self.args.batch_size, num_workers = self.args.num_workers, drop_last = True)
+        return DataLoader(self.test_img, batch_size = self.batch_size, num_workers = self.args.num_workers, drop_last = True)
     
     def get_dim(self):
         return self.out_dim
@@ -166,11 +168,6 @@ class LandmarkClassifier(pl.LightningModule):
 
         y_hat = self.model(x)
         loss = self.loss_fn(y_hat, y) * 1.0
-        #loss = nn.CrossEntropyLoss()(y_hat, y) * 1.0
-
-        #self.log('train_loss', loss, prog_bar = True)
-
-        #append_to_log(self.args, time.ctime() + ' ' + f'Epoch {self.current_epoch}, Train Loss: {loss:.5f}', True)
 
         return loss    
     
@@ -180,15 +177,10 @@ class LandmarkClassifier(pl.LightningModule):
         y_hat = self.model(x)
         preds_conf, preds = torch.max(y_hat,1)
 
-        #loss = nn.CrossEntropyLoss()(y_hat, y)
         loss = self.loss_fn(y_hat, y) * 1.0
-
         acc = self.accuracy(y_hat, y)
 
-        #self.log('val_loss', loss, prog_bar=True, logger=True)
         self.log('val_acc', acc, prog_bar=True, logger=True)
-
-        append_to_log(self.args, time.ctime() + ' ' + f'Epoch {self.current_epoch}, Val Loss: {(loss):.5f}, Val Acc {(acc):.6f}', False)
 
         metrics = dict({
                 'preds': preds,
@@ -210,25 +202,20 @@ class LandmarkClassifier(pl.LightningModule):
 
         self.log('val_gap', gap, prog_bar=True, logger=True)
 
-        append_to_log(self.args, time.ctime() + ' ' + f'CV Micro AP: {(gap):.6f}', False)
+        append_to_log(self.args, time.ctime() + ' ' + f'Epoch {self.current_epoch}, CV Micro AP: {(gap):.6f}', False)
     
     def test_step(self, batch, batch_idx):
         x, y = batch
 
         y_hat = self.model(x)
-
         preds_conf, preds = torch.max(y_hat.softmax(1),1)
 
-        #loss = nn.CrossEntropyLoss()(y_hat, y)
         loss = self.loss_fn(y_hat, y) * 1.0
-
         acc = self.accuracy(y_hat, y)
-        #gap = global_average_precision_score(y_hat, y)
 
-        #self.log('test_loss', loss, prog_bar=True, logger=True)
         self.log('test_acc', acc, prog_bar=True, logger=True)
 
-        append_to_log(self.args, time.ctime() + ' ' + f'Test Loss {(loss):.6f}, Test Acc {(acc):.6f}', False)
+        #append_to_log(self.args, time.ctime() + ' ' + f'Test Loss {(loss):.6f}, Test Acc {(acc):.6f}', False)
 
         metrics = dict({
                 'preds': preds,
@@ -267,10 +254,13 @@ if __name__ == '__main__':
     seed_everything(args.seed)
 
     data_module = LandmarkDataModule(args)
+    data_module.prepare_data()
 
     # Define Model
-    effnet = Effnet_Landmark()
+    effnet = Effnet_Landmark(args, data_module)
     model = LandmarkClassifier(args, effnet, data_module)
+
+    model.hparams.batch_size = args.batch_size
 
     # Logger
     tb_logger = loggers.TensorBoardLogger(args.log_dir)
@@ -286,11 +276,12 @@ if __name__ == '__main__':
     trainer = Trainer(
         gpus=args.gpus, 
         logger = tb_logger, 
-        #auto_scale_batch_size='binsearch', # automatically picks the batch size based on how much GPU memory we have available
+        #auto_scale_batch_size = 'binsearch',
         default_root_dir=args.model_dir, 
         callbacks=[checkpoint_callback], 
         max_epochs = args.epochs, 
         progress_bar_refresh_rate = 5)
+
     #trainer.tune(model, data_module)
     trainer.fit(model, data_module)
 

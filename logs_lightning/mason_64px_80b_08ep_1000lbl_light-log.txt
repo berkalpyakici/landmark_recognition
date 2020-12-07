@@ -1,0 +1,96 @@
+Loaded 15298 images with total 7 unique labels.
+
+Training Set: 10708 images.
+CV Set: 3060 images.
+Test Set: 1530 images.
+
+Loaded 15298 images with total 7 unique labels.
+
+Training Set: 10708 images.
+CV Set: 3060 images.
+Test Set: 1530 images.
+
+Loaded 15298 images with total 7 unique labels.
+
+Training Set: 10708 images.
+CV Set: 3060 images.
+Test Set: 1530 images.
+
+Loaded 15298 images with total 7 unique labels.
+
+Training Set: 10708 images.
+CV Set: 3060 images.
+Test Set: 1530 images.
+
+Loaded 15298 images with total 7 unique labels.
+
+Training Set: 10708 images.
+CV Set: 3060 images.
+Test Set: 1530 images.
+
+Loaded 15298 images with total 7 unique labels.
+
+Training Set: 10708 images.
+CV Set: 3060 images.
+Test Set: 1530 images.
+
+Loaded 15298 images with total 7 unique labels.
+
+Training Set: 10708 images.
+CV Set: 3060 images.
+Test Set: 1530 images.
+
+Loaded 15298 images with total 7 unique labels.
+
+Training Set: 10708 images.
+CV Set: 3060 images.
+Test Set: 1530 images.
+
+Loaded 15298 images with total 7 unique labels.
+
+Training Set: 10708 images.
+CV Set: 3060 images.
+Test Set: 1530 images.
+
+Loaded 15298 images with total 7 unique labels.
+
+Training Set: 10708 images.
+CV Set: 3060 images.
+Test Set: 1530 images.
+
+Loaded 15298 images with total 7 unique labels.
+
+Training Set: 10708 images.
+CV Set: 3060 images.
+Test Set: 1530 images.
+
+Loaded 15298 images with total 7 unique labels.
+
+Training Set: 10708 images.
+CV Set: 3060 images.
+Test Set: 1530 images.
+
+Loaded 15298 images with total 7 unique labels.
+
+Training Set: 10708 images.
+CV Set: 3060 images.
+Test Set: 1530 images.
+
+Loaded 15298 images with total 7 unique labels.
+
+Training Set: 10708 images.
+CV Set: 3060 images.
+Test Set: 1530 images.
+
+Loaded 15298 images with total 7 unique labels.
+
+Training Set: 10708 images.
+CV Set: 3060 images.
+Test Set: 1530 images.
+
+Mon Dec  7 01:42:34 2020 Epoch 0, CV Micro AP: 0.122334
+Mon Dec  7 01:43:45 2020 Epoch 0, CV Micro AP: 0.721557
+Mon Dec  7 01:44:56 2020 Epoch 1, CV Micro AP: 0.617960
+Mon Dec  7 01:46:06 2020 Epoch 2, CV Micro AP: 0.702659
+Mon Dec  7 01:47:17 2020 Epoch 3, CV Micro AP: 0.695746
+Mon Dec  7 01:47:29 2020 Test Micro AP: 0.713976
