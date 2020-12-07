@@ -183,10 +183,10 @@ class LandmarkClassifier(pl.LightningModule):
         self.log('val_acc', acc, prog_bar=True, logger=True)
 
         metrics = dict({
-                'preds': preds,
-                'preds_conf': preds_conf,
-                'targets': y,
-            })    
+            'preds': preds,
+            'preds_conf': preds_conf,
+            'targets': y,
+        })
 
         return metrics
 
@@ -200,9 +200,8 @@ class LandmarkClassifier(pl.LightningModule):
 
         gap = global_average_precision_score(self.data_module.get_dim(), out_val["targets"], [out_val["preds"], out_val["preds_conf"]])
 
-        self.log('val_gap', gap, prog_bar=True, logger=True)
-
-        append_to_log(self.args, time.ctime() + ' ' + f'Epoch {self.current_epoch}, CV Micro AP: {(gap):.6f}', False)
+        self.log('val_mAP', gap, prog_bar=True, logger=True)
+        append_to_log(self.args, time.ctime() + ' ' + f'Epoch {self.current_epoch}, Val mAP: {(gap):.6f}', False)
     
     def test_step(self, batch, batch_idx):
         x, y = batch
@@ -215,6 +214,7 @@ class LandmarkClassifier(pl.LightningModule):
 
         self.log('test_acc', acc, prog_bar=True, logger=True)
 
+        # Don't print at each step during training.
         #append_to_log(self.args, time.ctime() + ' ' + f'Test Loss {(loss):.6f}, Test Acc {(acc):.6f}', False)
 
         metrics = dict({
@@ -235,18 +235,21 @@ class LandmarkClassifier(pl.LightningModule):
 
         gap = global_average_precision_score(self.data_module.get_dim(), out_val["targets"], [out_val["preds"], out_val["preds_conf"]])
 
-        self.log('test_gap', gap, prog_bar=True, logger=True)
-
+        self.log('test_mAP', gap, prog_bar=True, logger=True)
         append_to_log(self.args, time.ctime() + ' ' + f'Test Micro AP: {(gap):.6f}', True)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.SGD(self.model.parameters(), lr = 0.001, momentum = 0.9, weight_decay = 1e-5)
+        optimizer = torch.optim.SGD(self.model.parameters(), lr = self.args.lr, momentum = self.args.momentum, weight_decay = self.args.weight_decay)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, self.args.epochs, verbose = True)
 
         return [optimizer], [scheduler]
 
 if __name__ == '__main__':
     args = getargs()
+
+    print("Running train.py...")
+    print('\n'.join([key +': '+ str(vars(args)[key]) for key in vars(args).keys()]))
+    print()
 
     os.makedirs(args.model_dir, exist_ok=True)
     os.makedirs(args.log_dir, exist_ok=True)
@@ -257,7 +260,7 @@ if __name__ == '__main__':
     data_module.prepare_data()
 
     # Define Model
-    effnet = Effnet_Landmark(args, data_module)
+    effnet = EffnetLandmark(args, data_module)
     model = LandmarkClassifier(args, effnet, data_module)
 
     model.hparams.batch_size = args.batch_size
@@ -267,10 +270,10 @@ if __name__ == '__main__':
 
     # Model Saving Setup
     checkpoint_callback = ModelCheckpoint(
-        monitor='val_gap',
+        monitor='val_mAP',
         dirpath=args.model_dir,
         mode = 'max',
-        filename=args.name + '{epoch:02d}-{val_gap:.4f}')
+        filename=args.name + '-{ep:02d}-{val_mAP:.4f}')
 
     # Define trainer and fit to data
     trainer = Trainer(

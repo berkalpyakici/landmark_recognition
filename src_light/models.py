@@ -11,7 +11,6 @@ import pytorch_lightning as pl
 class ArcMarginProduct(pl.LightningModule):
     def __init__(self, in_features, data_module):
         super().__init__()
-        print("TESTING HERE:",data_module.get_dim())
         self.weight = nn.Parameter(torch.Tensor(data_module.get_dim(), in_features))
         self.reset_parameters()
 
@@ -50,7 +49,7 @@ class ArcFaceLoss(pl.LightningModule):
         loss = self.crit(output, labels)
         return loss
 
-class Effnet_Landmark(pl.LightningModule):
+class EffnetLandmark(pl.LightningModule):
     def __init__(self, args, data_module):
         super().__init__()
 

@@ -24,6 +24,8 @@ def getargs():
     parser.add_argument('--num-workers', type = int, default = 4)
     parser.add_argument('--min-img-per-label', type = int, default = 500) # Minimum number of images per label.
     parser.add_argument('--lr', type = float, default = 0.001)
+    parser.add_argument('--momentum', type = float, default = 0.9)
+    parser.add_argument('--weight-decay', type = float, default = 1e-5)
     parser.add_argument('--epochs', type = int, default = 8)
 
     parsed_args, _ = parser.parse_known_args()
