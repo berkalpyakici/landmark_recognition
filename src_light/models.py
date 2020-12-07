@@ -24,7 +24,7 @@ class ArcMarginProduct(pl.LightningModule):
         return cosine
 
 class ArcFaceLoss(pl.LightningModule):
-    def __init__(self, s=45.0, m=0.35):
+    def __init__(self, s=30.0, m=0.35):
         super().__init__()
 
         self.crit = nn.CrossEntropyLoss(reduction="mean")   
