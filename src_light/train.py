@@ -153,7 +153,7 @@ class LandmarkDataModule(pl.LightningDataModule):
         return self.out_dim
 
 class LandmarkClassifier(pl.LightningModule):
-    def __init__(self, args, model, dataModule):
+    def __init__(self, args, model):
         super().__init__()
         self.model = model
         self.args = args
@@ -161,7 +161,6 @@ class LandmarkClassifier(pl.LightningModule):
         self.loss_fn = ArcFaceLoss()
 
         self.accuracy = pl.metrics.Accuracy()
-        self.data_module = dataModule
 
     def training_step(self, batch, batch_idx):
         x, y = batch
@@ -198,7 +197,7 @@ class LandmarkClassifier(pl.LightningModule):
         for key in out_val.keys():
             out_val[key] = out_val[key].detach().cpu().numpy().astype(np.float32)
 
-        gap = global_average_precision_score(self.data_module.get_dim(), out_val["targets"], [out_val["preds"], out_val["preds_conf"]])
+        gap = global_average_precision_score(self.model.out_features, out_val["targets"], [out_val["preds"], out_val["preds_conf"]])
 
         self.log('val_mAP', gap, prog_bar=True, logger=True)
         append_to_log(self.args, time.ctime() + ' ' + f'Epoch {self.current_epoch}, Val mAP: {(gap):.6f}', False)
@@ -233,7 +232,7 @@ class LandmarkClassifier(pl.LightningModule):
         for key in out_val.keys():
             out_val[key] = out_val[key].detach().cpu().numpy().astype(np.float32)
 
-        gap = global_average_precision_score(self.data_module.get_dim(), out_val["targets"], [out_val["preds"], out_val["preds_conf"]])
+        gap = global_average_precision_score(self.model.out_features, out_val["targets"], [out_val["preds"], out_val["preds_conf"]])
 
         self.log('test_mAP', gap, prog_bar=True, logger=True)
         append_to_log(self.args, time.ctime() + ' ' + f'Test Micro AP: {(gap):.6f}', True)
@@ -260,8 +259,8 @@ if __name__ == '__main__':
     data_module.prepare_data()
 
     # Define Model
-    effnet = EffnetLandmark(args, data_module)
-    model = LandmarkClassifier(args, effnet, data_module)
+    effnet = EffnetLandmark(args, data_module.get_dim())
+    model = LandmarkClassifier(args, effnet)
 
     model.hparams.batch_size = args.batch_size
 

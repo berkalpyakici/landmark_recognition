@@ -9,9 +9,9 @@ import geffnet
 import pytorch_lightning as pl
 
 class ArcMarginProduct(pl.LightningModule):
-    def __init__(self, in_features, data_module):
+    def __init__(self, in_features, out_features):
         super().__init__()
-        self.weight = nn.Parameter(torch.Tensor(data_module.get_dim(), in_features))
+        self.weight = nn.Parameter(torch.Tensor(out_features, in_features))
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -50,27 +50,24 @@ class ArcFaceLoss(pl.LightningModule):
         return loss
 
 class EffnetLandmark(pl.LightningModule):
-    def __init__(self, args, data_module):
+    def __init__(self, args, out_features):
         super().__init__()
 
         self.effnet = geffnet.create_model('tf_efficientnet_b7_ns', pretrained = True)
         self.in_features = self.effnet.classifier.in_features
+        self.out_features = out_features
         self.effnet.classifier = nn.Identity()
 
         self.embedding_size = 512
 
-        self.global_pool = nn.Identity() #placeholder if we want to add pooling
         self.neck = nn.Sequential(
             nn.Linear(self.in_features, self.embedding_size),
             nn.BatchNorm1d(self.embedding_size),
             nn.ReLU()
         )
 
-        self.head = ArcMarginProduct(self.embedding_size, data_module)
+        self.head = ArcMarginProduct(self.embedding_size, self.out_features)
     
     def forward(self, x):
         x = self.effnet(x)
-        #x = self.global_pool(x)
-        x = self.neck(x)
-
-        return self.head(x)
+        return self.head(self.neck(x))
