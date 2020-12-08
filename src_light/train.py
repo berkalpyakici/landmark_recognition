@@ -179,7 +179,7 @@ class LandmarkClassifier(pl.LightningModule):
         loss = self.loss_fn(y_hat, y) * 1.0
         acc = self.accuracy(y_hat, y)
 
-        self.log('val_acc', acc, prog_bar=True, logger=True)
+        self.log('val_acc', acc, prog_bar=True, logger=True, sync_dist=True)
 
         metrics = dict({
             'preds': preds,
@@ -199,7 +199,7 @@ class LandmarkClassifier(pl.LightningModule):
 
         gap = global_average_precision_score(self.model.out_features, out_val["targets"], [out_val["preds"], out_val["preds_conf"]])
 
-        self.log('val_mAP', gap, prog_bar=True, logger=True)
+        self.log('val_mAP', gap, prog_bar=True, logger=True, sync_dist=True)
         append_to_log(self.args, time.ctime() + ' ' + f'Epoch {self.current_epoch}, Val mAP: {(gap):.6f}', False)
     
     def test_step(self, batch, batch_idx):
@@ -211,7 +211,7 @@ class LandmarkClassifier(pl.LightningModule):
         loss = self.loss_fn(y_hat, y) * 1.0
         acc = self.accuracy(y_hat, y)
 
-        self.log('test_acc', acc, prog_bar=True, logger=True)
+        self.log('test_acc', acc, prog_bar=True, logger=True, sync_dist=True)
 
         # Don't print at each step during training.
         #append_to_log(self.args, time.ctime() + ' ' + f'Test Loss {(loss):.6f}, Test Acc {(acc):.6f}', False)
@@ -234,7 +234,7 @@ class LandmarkClassifier(pl.LightningModule):
 
         gap = global_average_precision_score(self.model.out_features, out_val["targets"], [out_val["preds"], out_val["preds_conf"]])
 
-        self.log('test_mAP', gap, prog_bar=True, logger=True)
+        self.log('test_mAP', gap, prog_bar=True, logger=True, sync_dist=True)
         append_to_log(self.args, time.ctime() + ' ' + f'Test Micro AP: {(gap):.6f}', True)
 
     def configure_optimizers(self):
@@ -257,7 +257,7 @@ if __name__ == '__main__':
 
     data_module = LandmarkDataModule(args)
     data_module.prepare_data()
-
+    
     # Define Model
     effnet = EffnetLandmark(args, data_module.get_dim())
     model = LandmarkClassifier(args, effnet)
@@ -274,14 +274,21 @@ if __name__ == '__main__':
         mode = 'max',
         filename=args.name + '-{epoch:02d}-{val_mAP:.4f}')
 
+    if args.gpus > 1:
+        accelerator = 'ddp'
+    else:
+        accelerator = None
+
     # Define trainer and fit to data
     trainer = Trainer(
         gpus=args.gpus, 
         logger = tb_logger, 
+        accelerator=accelerator,
         #auto_scale_batch_size = 'binsearch',
         default_root_dir=args.model_dir, 
         callbacks=[checkpoint_callback], 
         max_epochs = args.epochs, 
+        precision = 16,
         progress_bar_refresh_rate = 5)
 
     #trainer.tune(model, data_module)

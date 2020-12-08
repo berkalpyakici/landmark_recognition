@@ -133,11 +133,11 @@ dmypy.json
 
 # landmark recognition stuff
 Data/
-weights/
-weights_final/
-logs/
-logs_lightning/default/
+weights_experiment/
+logs_experiment/
 *.whl
 *.pth
 *.csv
 *.ckpt
+*.yaml
+*.txt
