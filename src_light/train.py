@@ -282,6 +282,7 @@ if __name__ == '__main__':
         default_root_dir=args.model_dir, 
         callbacks=[checkpoint_callback], 
         max_epochs = args.epochs, 
+        precision = 16,
         progress_bar_refresh_rate = 5)
 
     #trainer.tune(model, data_module)
