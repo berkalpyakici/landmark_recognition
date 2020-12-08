@@ -179,7 +179,7 @@ class LandmarkClassifier(pl.LightningModule):
         loss = self.loss_fn(y_hat, y) * 1.0
         acc = self.accuracy(y_hat, y)
 
-        self.log('val_acc', acc, prog_bar=True, logger=True)
+        self.log('val_acc', acc, prog_bar=True, logger=True, sync_dist=True)
 
         metrics = dict({
             'preds': preds,
@@ -199,7 +199,7 @@ class LandmarkClassifier(pl.LightningModule):
 
         gap = global_average_precision_score(self.model.out_features, out_val["targets"], [out_val["preds"], out_val["preds_conf"]])
 
-        self.log('val_mAP', gap, prog_bar=True, logger=True)
+        self.log('val_mAP', gap, prog_bar=True, logger=True, sync_dist=True)
         append_to_log(self.args, time.ctime() + ' ' + f'Epoch {self.current_epoch}, Val mAP: {(gap):.6f}', False)
     
     def test_step(self, batch, batch_idx):
@@ -211,7 +211,7 @@ class LandmarkClassifier(pl.LightningModule):
         loss = self.loss_fn(y_hat, y) * 1.0
         acc = self.accuracy(y_hat, y)
 
-        self.log('test_acc', acc, prog_bar=True, logger=True)
+        self.log('test_acc', acc, prog_bar=True, logger=True, sync_dist=True)
 
         # Don't print at each step during training.
         #append_to_log(self.args, time.ctime() + ' ' + f'Test Loss {(loss):.6f}, Test Acc {(acc):.6f}', False)
@@ -234,7 +234,7 @@ class LandmarkClassifier(pl.LightningModule):
 
         gap = global_average_precision_score(self.model.out_features, out_val["targets"], [out_val["preds"], out_val["preds_conf"]])
 
-        self.log('test_mAP', gap, prog_bar=True, logger=True)
+        self.log('test_mAP', gap, prog_bar=True, logger=True, sync_dist=True)
         append_to_log(self.args, time.ctime() + ' ' + f'Test Micro AP: {(gap):.6f}', True)
 
     def configure_optimizers(self):
@@ -278,6 +278,7 @@ if __name__ == '__main__':
     trainer = Trainer(
         gpus=args.gpus, 
         logger = tb_logger, 
+        accelerator='ddp',
         #auto_scale_batch_size = 'binsearch',
         default_root_dir=args.model_dir, 
         callbacks=[checkpoint_callback], 
