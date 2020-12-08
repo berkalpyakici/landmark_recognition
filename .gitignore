@@ -130,23 +130,3 @@ dmypy.json
 
 # IDE
 .vscode/
-
-# landmark recognition stuff
-Data/
-<<<<<<< HEAD
-weights_experiment/
-logs_experiment/
-*.whl
-*.pth
-*.csv
-*.ckpt
-*.yaml
-*.txt
-=======
-weights/
-weights_final/
-logs/
-*.whl
-
-.vscode/
->>>>>>> main
