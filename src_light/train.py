@@ -257,7 +257,7 @@ if __name__ == '__main__':
 
     data_module = LandmarkDataModule(args)
     data_module.prepare_data()
-
+    
     # Define Model
     effnet = EffnetLandmark(args, data_module.get_dim())
     model = LandmarkClassifier(args, effnet)
@@ -274,11 +274,16 @@ if __name__ == '__main__':
         mode = 'max',
         filename=args.name + '-{epoch:02d}-{val_mAP:.4f}')
 
+    if args.gpus > 1:
+        accelerator = 'ddp'
+    else:
+        accelerator = None
+
     # Define trainer and fit to data
     trainer = Trainer(
         gpus=args.gpus, 
         logger = tb_logger, 
-        accelerator='ddp',
+        accelerator=accelerator,
         #auto_scale_batch_size = 'binsearch',
         default_root_dir=args.model_dir, 
         callbacks=[checkpoint_callback], 
