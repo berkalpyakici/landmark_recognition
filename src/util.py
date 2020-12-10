@@ -1,9 +1,6 @@
 import argparse
-import albumentations
 import os
 import numpy as np
-
-import torch
 
 def getargs():
     """
@@ -17,7 +14,7 @@ def getargs():
     parser.add_argument('--model-dir', type = str, required = True)
     parser.add_argument('--name', type = str, required = True)
 
-    parser.add_argument('--checkpoint_path', type = str)
+    parser.add_argument('--checkpoint-path', type = str)
 
     parser.add_argument('--gpus', type = int, default = 0)
     parser.add_argument('--seed', type = int, default = 0)

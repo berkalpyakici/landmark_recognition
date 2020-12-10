@@ -8,13 +8,10 @@ import albumentations
 import torch
 from torch import nn
 import torch.nn.functional as F
-from torchvision import transforms
 from torch.utils.data import DataLoader
-from torch.utils.data import random_split
 
 import pytorch_lightning as pl
 from pytorch_lightning import loggers, seed_everything, Trainer
-from pytorch_lightning.tuner.tuning import Tuner
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 from models import *
@@ -213,9 +210,6 @@ class LandmarkClassifier(pl.LightningModule):
 
         self.log('test_acc', acc, prog_bar=True, logger=True, sync_dist=True)
 
-        # Don't print at each step during training.
-        #append_to_log(self.args, time.ctime() + ' ' + f'Test Loss {(loss):.6f}, Test Acc {(acc):.6f}', False)
-
         metrics = dict({
                 'preds': preds,
                 'preds_conf':preds_conf,
@@ -244,7 +238,7 @@ class LandmarkClassifier(pl.LightningModule):
         return [optimizer], [scheduler]
 
 
-def train(args):
+def main(args):
     data_module = LandmarkDataModule(args)
     data_module.prepare_data()
     
@@ -278,28 +272,16 @@ def train(args):
         callbacks=[checkpoint_callback], 
         max_epochs = args.epochs, 
         precision = 16,
+        resume_from_checkpoint = 'weights_experiment/128px-64b-12ep-50lbl-epoch=11-val_mAP=0.5636.ckpt' if args.mode == 'test' else None,
         progress_bar_refresh_rate = 5)
+
+    trainer.fit(model, data_module)
 
     if args.mode == "train":
-        trainer.fit(model, data_module)
-
-    trainer.test(datamodule = data_module)
-
-def test(args):
-    data_module = LandmarkDataModule(args)
-    data_module.prepare_data()
-
-    # Load the model
-    effnet = EffnetLandmark(args, data_module.get_dim())
-    model = LandmarkClassifier.load_from_checkpoint(args.checkpoint_path, args, effnet)
-
-    # Define trainer
-    trainer = Trainer(
-        gpus=args.gpus, 
-        precision = 16,
-        progress_bar_refresh_rate = 5)
+        trainer.test(datamodule = data_module)
     
-    trainer.test(model, datamodule = data_module)
+    if args.mode == "test":
+        trainer.test(datamodule = data_module, ckpt_path='weights_experiment/128px-64b-12ep-50lbl-epoch=11-val_mAP=0.5636.ckpt')
 
 if __name__ == '__main__':
     args = getargs()
@@ -313,7 +295,4 @@ if __name__ == '__main__':
 
     seed_everything(args.seed)
 
-    if args.mode == "train":
-        train(args)
-    elif args.mode == "test":
-        test(args)
+    main(args)
