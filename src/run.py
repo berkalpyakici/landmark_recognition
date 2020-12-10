@@ -243,25 +243,14 @@ class LandmarkClassifier(pl.LightningModule):
 
         return [optimizer], [scheduler]
 
-if __name__ == '__main__':
-    args = getargs()
 
-    print("Running train.py...")
-    print('\n'.join([key +': '+ str(vars(args)[key]) for key in vars(args).keys()]))
-    print()
-
-    os.makedirs(args.model_dir, exist_ok=True)
-    os.makedirs(args.log_dir, exist_ok=True)
-
-    seed_everything(args.seed)
-
+def train(args):
     data_module = LandmarkDataModule(args)
     data_module.prepare_data()
     
     # Define Model
     effnet = EffnetLandmark(args, data_module.get_dim())
     model = LandmarkClassifier(args, effnet)
-
     model.hparams.batch_size = args.batch_size
 
     # Logger
@@ -291,7 +280,40 @@ if __name__ == '__main__':
         precision = 16,
         progress_bar_refresh_rate = 5)
 
-    #trainer.tune(model, data_module)
-    trainer.fit(model, data_module)
+    if args.mode == "train":
+        trainer.fit(model, data_module)
 
     trainer.test(datamodule = data_module)
+
+def test(args):
+    data_module = LandmarkDataModule(args)
+    data_module.prepare_data()
+
+    # Load the model
+    effnet = EffnetLandmark(args, data_module.get_dim())
+    model = LandmarkClassifier.load_from_checkpoint(args.checkpoint_path, args, effnet)
+
+    # Define trainer
+    trainer = Trainer(
+        gpus=args.gpus, 
+        precision = 16,
+        progress_bar_refresh_rate = 5)
+    
+    trainer.test(model, datamodule = data_module)
+
+if __name__ == '__main__':
+    args = getargs()
+
+    print("Running run.py...")
+    print('\n'.join([key +': '+ str(vars(args)[key]) for key in vars(args).keys()]))
+    print()
+
+    os.makedirs(args.model_dir, exist_ok=True)
+    os.makedirs(args.log_dir, exist_ok=True)
+
+    seed_everything(args.seed)
+
+    if args.mode == "train":
+        train(args)
+    elif args.mode == "test":
+        test(args)

@@ -11,11 +11,13 @@ def getargs():
     """
     parser = argparse.ArgumentParser()
 
-    #parser.add_argument('--mode', type = str, required = True)
+    parser.add_argument('--mode', type = str, default = "train", required = True)
     parser.add_argument('--img-dir', type = str, required = True)
     parser.add_argument('--log-dir', type = str, required = True)
     parser.add_argument('--model-dir', type = str, required = True)
     parser.add_argument('--name', type = str, required = True)
+
+    parser.add_argument('--checkpoint_path', type = str)
 
     parser.add_argument('--gpus', type = int, default = 0)
     parser.add_argument('--seed', type = int, default = 0)
