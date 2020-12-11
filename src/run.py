@@ -238,7 +238,18 @@ class LandmarkClassifier(pl.LightningModule):
         return [optimizer], [scheduler]
 
 
-def main(args):
+if __name__ == '__main__':
+    args = getargs()
+
+    print("Running run.py...")
+    print('\n'.join([key +': '+ str(vars(args)[key]) for key in vars(args).keys()]))
+    print()
+
+    os.makedirs(args.model_dir, exist_ok=True)
+    os.makedirs(args.log_dir, exist_ok=True)
+
+    seed_everything(args.seed)
+
     data_module = LandmarkDataModule(args)
     data_module.prepare_data()
     
@@ -272,27 +283,12 @@ def main(args):
         callbacks=[checkpoint_callback], 
         max_epochs = args.epochs, 
         precision = 16,
-        resume_from_checkpoint = 'weights_experiment/128px-64b-12ep-50lbl-epoch=11-val_mAP=0.5636.ckpt' if args.mode == 'test' else None,
+        resume_from_checkpoint = args.checkpoint_path if args.mode == 'test' else None,
         progress_bar_refresh_rate = 5)
 
     trainer.fit(model, data_module)
 
     if args.mode == "train":
         trainer.test(datamodule = data_module)
-    
-    if args.mode == "test":
-        trainer.test(datamodule = data_module, ckpt_path='weights_experiment/128px-64b-12ep-50lbl-epoch=11-val_mAP=0.5636.ckpt')
-
-if __name__ == '__main__':
-    args = getargs()
-
-    print("Running run.py...")
-    print('\n'.join([key +': '+ str(vars(args)[key]) for key in vars(args).keys()]))
-    print()
-
-    os.makedirs(args.model_dir, exist_ok=True)
-    os.makedirs(args.log_dir, exist_ok=True)
-
-    seed_everything(args.seed)
-
-    main(args)
+    elif args.mode == "test":
+        trainer.test(datamodule = data_module, ckpt_path=args.checkpoint_path)
