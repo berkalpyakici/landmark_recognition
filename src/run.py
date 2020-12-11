@@ -213,8 +213,8 @@ class LandmarkClassifier(pl.LightningModule):
         metrics = dict({
                 'preds': preds,
                 'preds_conf':preds_conf,
-                'targets': y,
-            })    
+                'targets': y
+            })
 
         return metrics
 
@@ -226,7 +226,12 @@ class LandmarkClassifier(pl.LightningModule):
         for key in out_val.keys():
             out_val[key] = out_val[key].detach().cpu().numpy().astype(np.float32)
 
-        gap = global_average_precision_score(self.model.out_features, out_val["targets"], [out_val["preds"], out_val["preds_conf"]])
+        gap = global_average_precision_score(self.model.out_features, out_val["targets"], [out_val["preds"], out_val["preds_conf"]])            
+
+        df = pd.DataFrame(out_val).sort_values(by = ["preds_conf"], ascending = False)
+        df = df[df['preds'] != df['targets']]
+
+        df.to_csv(os.path.join(self.args.log_dir, f'{self.args.name}-test_results.csv'), index=True)
 
         self.log('test_mAP', gap, prog_bar=True, logger=True, sync_dist=True)
         append_to_log(self.args, time.ctime() + ' ' + f'Test Micro AP: {(gap):.6f}', True)
@@ -283,6 +288,7 @@ if __name__ == '__main__':
         callbacks=[checkpoint_callback], 
         max_epochs = args.epochs, 
         precision = 16,
+        num_sanity_val_steps = 0 if args.mode == 'test' else 5,
         resume_from_checkpoint = args.checkpoint_path if args.mode == 'test' else None,
         progress_bar_refresh_rate = 5)
 
